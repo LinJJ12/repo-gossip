@@ -1,0 +1,52 @@
+{
+  "name": "repo-gossip",
+  "version": "0.1.0",
+  "description": "把仓库链接丢给 Bot，它不给你看枯燥的提交列表，而是给你整一份「项目八卦小报」。",
+  "type": "module",
+  "bin": {
+    "repo-gossip": "./dist/cli.js"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "build": "tsc",
+    "start": "tsx src/index.ts",
+    "start:prod": "npm run build && node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "gossip": "tsx src/cli.ts",
+    "web": "vite --config web/vite.config.ts",
+    "web:build": "vite build --config web/vite.config.ts"
+  },
+  "keywords": [
+    "github",
+    "bot",
+    "discord",
+    "telegram",
+    "feishu",
+    "llm",
+    "gossip",
+    "changelog"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@octokit/rest": "^21.1.1",
+    "discord.js": "^14.18.0",
+    "dotenv": "^16.4.7",
+    "grammy": "^1.35.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vercel/node": "^5.1.14",
+    "@vitejs/plugin-react": "^6.1.1",
+    "tsx": "^4.19.3",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.2"
+  }
+}
