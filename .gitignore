@@ -1,7 +1,9 @@
 node_modules/
 dist/
+web/dist/
 .env
-.env.local
+.env.*
+!.env.example
 *.log
 .DS_Store
 .vercel
