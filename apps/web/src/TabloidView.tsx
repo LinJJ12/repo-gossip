@@ -73,15 +73,18 @@ export function TabloidView({ data }: { data: TabloidPayload }) {
         <section className="block">
           <h3>提交信翻译</h3>
           <ul className="trans-list">
-            {tabloid.translations.map((t, i) => (
-              <li key={`${t.original}-${i}`}>
-                <code>{t.original}</code>
-                <p>
-                  <span className="arrow">→</span> {t.drama}
-                  {t.author ? <cite> ——{t.author}</cite> : null}
-                </p>
-              </li>
-            ))}
+            {tabloid.translations
+              .filter((t) => t.original.trim() || t.drama.trim())
+              .map((t, i) => (
+                <li key={`${t.original}-${i}`}>
+                  {t.original ? <code>{t.original}</code> : null}
+                  <p>
+                    <span className="arrow">→</span>{" "}
+                    {t.drama || "（暂无翻译）"}
+                    {t.author ? <cite> ——{t.author}</cite> : null}
+                  </p>
+                </li>
+              ))}
           </ul>
         </section>
       )}

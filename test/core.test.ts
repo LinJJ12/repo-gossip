@@ -78,6 +78,25 @@ describe("buildOfflineTabloid", () => {
   });
 });
 
+describe("normalizeTranslations", () => {
+  it("accepts Chinese field names", async () => {
+    const { normalizeTranslations } = await import(
+      "../packages/core/src/llm.js"
+    );
+    const out = normalizeTranslations([
+      {
+        "\u539f\u6587": "fix: bug",
+        "\u7ffb\u8bd1": "\u9ad8\u70e7\u6551\u4eba",
+        "\u4f5c\u8005": "alice",
+      },
+    ]);
+    assert.equal(out.length, 1);
+    assert.equal(out[0]!.original, "fix: bug");
+    assert.equal(out[0]!.drama, "\u9ad8\u70e7\u6551\u4eba");
+    assert.equal(out[0]!.author, "alice");
+  });
+});
+
 describe("dramatizeLocally", () => {
   it("special-cases fix commits", () => {
     const out = dramatizeLocally("fix: payment bug");

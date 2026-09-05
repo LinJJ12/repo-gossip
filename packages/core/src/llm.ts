@@ -37,7 +37,7 @@ export async function generateTabloid(
 }
 
 const SYSTEM_PROMPT =
-  "You are a Chinese tabloid editor for GitHub repos. Be funny and epic, never insult people. Output ONE JSON object only with keys: epicTitle, awardsNarrative, temperatureLine, translations, easterEggLines, closing. All string values must be Chinese.";
+  "You are a Chinese tabloid editor for GitHub repos. Be funny and epic, never insult people. Output ONE JSON object only. Use EXACTLY these English keys: epicTitle, awardsNarrative, temperatureLine, translations, easterEggLines, closing. Each translations item MUST be {\"original\":\"commit message\",\"drama\":\"Chinese rewrite\",\"author\":\"name\"}. Never leave drama empty. All human-readable string values must be Chinese.";
 
 function buildFactSheet(a: AnalyzedGossip): string {
   const { snapshot: s, temperature: t, awards, easterEggs, topAuthors, notableCommits } =
@@ -135,37 +135,94 @@ function parseTabloidJson(raw: string, analyzed: AnalyzedGossip): Tabloid {
   const end = cleaned.lastIndexOf("}");
   const jsonText =
     start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned;
-  const parsed = JSON.parse(jsonText) as Partial<Tabloid>;
+  const parsed = JSON.parse(jsonText) as Record<string, unknown>;
+
+  let translations = normalizeTranslations(parsed.translations);
+  if (translations.length === 0 || translations.every((t) => !t.drama.trim())) {
+    translations = analyzed.notableCommits.slice(0, 5).map((c) => ({
+      original: c.message,
+      drama: dramatizeLocally(c.message),
+      author: c.author,
+    }));
+  }
 
   return {
-    epicTitle: parsed.epicTitle || fallbackTitle(analyzed),
+    epicTitle: String(parsed.epicTitle || fallbackTitle(analyzed)),
     awardsNarrative: Array.isArray(parsed.awardsNarrative)
       ? parsed.awardsNarrative.map(String)
       : analyzed.awards.map(
           (a) =>
             `${a.emoji}\u300c${a.title}\u300d\u2014\u2014${a.winner} (${a.reason})`,
         ),
-    temperatureLine:
+    temperatureLine: String(
       parsed.temperatureLine ||
-      `${analyzed.temperature.emoji} ${analyzed.temperature.label}`,
-    translations: Array.isArray(parsed.translations)
-      ? parsed.translations.map((t) => ({
-          original: String(t.original ?? ""),
-          drama: String(t.drama ?? ""),
-          author: String(t.author ?? ""),
-        }))
-      : [],
+        `${analyzed.temperature.emoji} ${analyzed.temperature.label}`,
+    ),
+    translations,
     easterEggLines: Array.isArray(parsed.easterEggLines)
       ? parsed.easterEggLines.map(String)
       : analyzed.easterEggs.map(
           (e) =>
             `${e.emoji} ${e.tag}\u2014\u2014${e.author} @ ${e.sha}: \u300c${e.evidence}\u300d`,
         ),
-    closing:
-      parsed.closing ||
-      "\u672c\u671f\u516b\u5366\u5230\u6b64\u7ed3\u675f\u3002",
+    closing: String(
+      parsed.closing || "\u672c\u671f\u516b\u5366\u5230\u6b64\u7ed3\u675f\u3002",
+    ),
     analyzed,
   };
+}
+
+export function normalizeTranslations(raw: unknown): {
+  original: string;
+  drama: string;
+  author: string;
+}[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const t = item as Record<string, unknown>;
+      const original = pickStr(t, [
+        "original",
+        "commit",
+        "message",
+        "src",
+        "source",
+        "\u539f\u6587",
+        "\u63d0\u4ea4",
+      ]);
+      const drama = pickStr(t, [
+        "drama",
+        "translation",
+        "rewrite",
+        "gossip",
+        "text",
+        "\u7ffb\u8bd1",
+        "\u8bd1\u6587",
+        "\u516b\u5366",
+        "\u6da8\u8bd1",
+      ]);
+      const author = pickStr(t, [
+        "author",
+        "by",
+        "user",
+        "\u4f5c\u8005",
+        "\u4f5c\u8005\u540d",
+      ]);
+      if (!original && !drama) return null;
+      return { original, drama, author };
+    })
+    .filter((x): x is { original: string; drama: string; author: string } =>
+      Boolean(x),
+    );
+}
+
+function pickStr(obj: Record<string, unknown>, keys: string[]): string {
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return "";
 }
 
 function fallbackTabloid(analyzed: AnalyzedGossip): Tabloid {

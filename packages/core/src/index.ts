@@ -19,4 +19,4 @@ export type { GossipOptions, GossipMode } from "./gossip.js";
 export { analyzeSnapshot } from "./analyzer.js";
 export { formatTabloid, toDiscordEmbed, toFeishuCard } from "./format.js";
 export { createOctokit, fetchRepoSnapshot } from "./github.js";
-export { generateTabloid, dramatizeLocally } from "./llm.js";
+export { generateTabloid, dramatizeLocally, normalizeTranslations } from "./llm.js";
