@@ -7,3 +7,10 @@
 # picking either side (task state lives in task.json, not index.md). See
 # .trellis/spec/cli/backend/directory-structure.md for details.
 .trellis/workspace/*/journal-*.md merge=union
+
+# Keep GitHub language stats focused on product code (TS/CSS), not Trellis scaffolding.
+.trellis/** linguist-vendored
+.cursor/hooks/** linguist-vendored
+.cursor/agents/** linguist-vendored
+.cursor/commands/** linguist-vendored
+.cursor/skills/** linguist-vendored
