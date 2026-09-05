@@ -1,5 +1,5 @@
 import { Bot, InlineKeyboard } from "grammy";
-import { runGossip } from "../core/gossip.js";
+import { runGossip } from "@repo-gossip/core";
 
 const REPO_RE =
   /(?:https?:\/\/github\.com\/)?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)/;
@@ -49,8 +49,7 @@ async function replyGossip(
       "打开仓库",
       `https://github.com/${repo.replace(/\.git$/i, "")}`,
     );
-    await ctx.reply(message.markdown.slice(0, 4000), {
-      parse_mode: "Markdown",
+    await ctx.reply(message.plain.slice(0, 4000), {
       reply_markup: keyboard,
     });
   } catch (err) {

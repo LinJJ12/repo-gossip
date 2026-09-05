@@ -1,22 +1,24 @@
 #!/usr/bin/env node
-import "dotenv/config";
-import { runGossip } from "./core/gossip.js";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { config as loadDotenv } from "dotenv";
+import { runGossip } from "./gossip.js";
+
+loadDotenv({
+  path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../.env"),
+});
 
 function printHelp() {
-  console.log(`repo-gossip — 项目八卦小报
+  console.log(`repo-gossip
 
-用法:
-  npx tsx src/cli.ts <owner/repo|github-url> [options]
+Usage:
+  npm run gossip -- <owner/repo|github-url> [options]
 
-选项:
-  --offline          不调用 LLM，使用本地土味翻译
-  --days <n>         回溯天数（默认 14）
-  --json             输出原始 JSON
-  -h, --help         帮助
-
-示例:
-  npm run gossip -- vercel/next.js --offline
-  npm run gossip -- https://github.com/openai/openai-node
+Options:
+  --offline          skip LLM, use local templates
+  --days <n>         lookback days (default 14)
+  --json             print raw JSON
+  -h, --help         help
 `);
 }
 
@@ -51,7 +53,7 @@ async function main() {
   const { flags, kv, positionals } = parseArgs(argv);
   const repo = positionals[0];
   if (!repo) {
-    console.error("请提供仓库地址，例如 owner/repo");
+    console.error("Please provide owner/repo");
     process.exit(1);
   }
 
@@ -59,13 +61,17 @@ async function main() {
   const offline = flags.has("--offline");
   const json = flags.has("--json");
 
-  console.error(`📡 正在偷看 ${repo} 的提交簿…`);
+  console.error(`Fetching gossip for ${repo}...`);
 
-  const { tabloid, message } = await runGossip({
+  const { tabloid, message, mode, llmError } = await runGossip({
     repo,
     sinceDays: Number.isFinite(sinceDays) ? sinceDays : 14,
     offline,
   });
+
+  if (mode !== "llm") {
+    console.error(`[mode=${mode}]${llmError ? ` ${llmError}` : ""}`);
+  }
 
   if (json) {
     console.log(JSON.stringify(tabloid, null, 2));
@@ -75,6 +81,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("❌", err instanceof Error ? err.message : err);
+  console.error(err instanceof Error ? err.message : err);
   process.exit(1);
 });

@@ -38,20 +38,34 @@ export function TabloidView({ data }: { data: TabloidPayload }) {
         <p className="lead">{tabloid.temperatureLine}</p>
       </section>
 
-      {analyzed.awards.length > 0 && (
+      {(tabloid.awardsNarrative.length > 0 || analyzed.awards.length > 0) && (
         <section className="block">
           <h3>颁奖典礼</h3>
-          <ul className="award-list">
-            {analyzed.awards.map((a) => (
-              <li key={a.id}>
-                <span className="award-emoji">{a.emoji}</span>
-                <div>
-                  <p className="award-title">「{a.title}」——{a.winner}</p>
-                  <p className="award-reason">{a.reason}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
+          {tabloid.awardsNarrative.length > 0 ? (
+            <ul className="award-list">
+              {tabloid.awardsNarrative.map((line, i) => (
+                <li key={i}>
+                  <div>
+                    <p className="award-title">{line}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <ul className="award-list">
+              {analyzed.awards.map((a) => (
+                <li key={a.id}>
+                  <span className="award-emoji">{a.emoji}</span>
+                  <div>
+                    <p className="award-title">
+                      「{a.title}」——{a.winner}
+                    </p>
+                    <p className="award-reason">{a.reason}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
 

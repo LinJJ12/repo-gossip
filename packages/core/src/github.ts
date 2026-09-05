@@ -1,5 +1,5 @@
 import { Octokit } from "@octokit/rest";
-import type { CommitStat, RepoRef, RepoSnapshot } from "../types.js";
+import type { CommitStat, RepoRef, RepoSnapshot } from "./types.js";
 
 const MAX_COMMITS = 40;
 
@@ -72,10 +72,7 @@ function toCommitStat(
   return {
     sha: data.sha.slice(0, 7),
     message: (data.commit.message || "").split("\n")[0]!.trim(),
-    author:
-      data.author?.login ||
-      data.commit.author?.name ||
-      "无名氏",
+    author: data.author?.login || data.commit.author?.name || "anonymous",
     authorLogin: data.author?.login ?? undefined,
     date:
       data.commit.author?.date ||

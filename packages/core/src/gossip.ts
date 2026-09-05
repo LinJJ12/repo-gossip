@@ -1,5 +1,5 @@
-import { loadEnv, parseRepoRef } from "../config.js";
-import type { AnalyzedGossip, PlatformMessage, Tabloid } from "../types.js";
+import { loadEnv, parseRepoRef } from "./config.js";
+import type { AnalyzedGossip, PlatformMessage, Tabloid } from "./types.js";
 import { analyzeSnapshot } from "./analyzer.js";
 import { formatTabloid } from "./format.js";
 import { createOctokit, fetchRepoSnapshot } from "./github.js";
@@ -8,7 +8,7 @@ import { dramatizeLocally, generateTabloid } from "./llm.js";
 export type GossipOptions = {
   repo: string;
   sinceDays?: number;
-  /** 跳过 LLM，只用本地土味翻译（方便无 Key 演示） */
+  /** Skip LLM; use local template translations */
   offline?: boolean;
   env?: Record<string, string | undefined>;
 };
@@ -30,14 +30,24 @@ export async function runGossip(options: GossipOptions): Promise<{
   });
   const analyzed = analyzeSnapshot(snapshot);
 
-  if (options.offline) {
+  const apiKey = options.env?.LLM_API_KEY ?? process.env.LLM_API_KEY;
+  const wantOffline = options.offline || !apiKey;
+
+  if (wantOffline) {
     const tabloid = buildOfflineTabloid(analyzed);
-    return { tabloid, message: formatTabloid(tabloid), mode: "offline" };
+    return {
+      tabloid,
+      message: formatTabloid(tabloid),
+      mode: "offline",
+      llmError: options.offline
+        ? undefined
+        : "missing LLM_API_KEY; used local templates",
+    };
   }
 
   const env = loadEnv(options.env);
   const { tabloid, mode, llmError } = await generateTabloid(analyzed, {
-    apiKey: env.LLM_API_KEY,
+    apiKey: apiKey as string,
     baseUrl: env.LLM_BASE_URL,
     model: env.LLM_MODEL,
   });
@@ -54,19 +64,20 @@ export function buildOfflineTabloid(analyzed: AnalyzedGossip): Tabloid {
   const name = analyzed.snapshot.ref.repo;
   const title =
     analyzed.temperature.level === "blazing"
-      ? `《${name}：连续加班的七个日夜》`
+      ? `\u300a${name}\uff1a\u8fde\u7eed\u52a0\u73ed\u7684\u4e03\u4e2a\u65e5\u591c\u300b`
       : analyzed.temperature.level === "frozen"
-        ? `《${name}：冰封仓库的漫长冬天》`
-        : `《${name}：提交簿上的江湖恩怨》`;
+        ? `\u300a${name}\uff1a\u51b0\u5c01\u4ed3\u5e93\u7684\u6f2b\u957f\u51ac\u5929\u300b`
+        : `\u300a${name}\uff1a\u63d0\u4ea4\u7c3f\u4e0a\u7684\u6c5f\u6e56\u6069\u6028\u300b`;
 
   return {
     epicTitle: title,
     awardsNarrative: analyzed.awards.map(
-      (a) => `${a.emoji}「${a.title}」——${a.winner}（${a.reason}）`,
+      (a) =>
+        `${a.emoji}\u300c${a.title}\u300d\u2014\u2014${a.winner} (${a.reason})`,
     ),
-    temperatureLine: `${analyzed.temperature.emoji}「${analyzed.temperature.label}」——近 3 天 ${analyzed.temperature.commitsLast3Days} 次提交${
+    temperatureLine: `${analyzed.temperature.emoji}\u300c${analyzed.temperature.label}\u300d\u2014\u2014 last3d ${analyzed.temperature.commitsLast3Days}${
       analyzed.temperature.daysSinceLastCommit !== null
-        ? `，距上次提交 ${analyzed.temperature.daysSinceLastCommit} 天`
+        ? `, daysSinceLast=${analyzed.temperature.daysSinceLastCommit}`
         : ""
     }`,
     translations: analyzed.notableCommits.slice(0, 5).map((c) => ({
@@ -75,12 +86,13 @@ export function buildOfflineTabloid(analyzed: AnalyzedGossip): Tabloid {
       author: c.author,
     })),
     easterEggLines: analyzed.easterEggs.map(
-      (e) => `${e.emoji} ${e.tag}——${e.author} @ ${e.sha}：「${e.evidence}」`,
+      (e) =>
+        `${e.emoji} ${e.tag}\u2014\u2014${e.author} @ ${e.sha}\uff1a\u300c${e.evidence}\u300d`,
     ),
     closing:
       analyzed.snapshot.commits.length === 0
-        ? "本期小报无素材：仓库正在装死，请投放更多 commits。"
-        : "本地八卦模式：没 LLM 也能把仓库骂得很花。",
+        ? "\u672c\u671f\u5c0f\u62a5\u65e0\u7d20\u6750\uff1a\u4ed3\u5e93\u6b63\u5728\u88c5\u6b7b\u3002"
+        : "\u672c\u5730\u516b\u5366\u6a21\u5f0f\u5df2\u542f\u7528\u3002",
     analyzed,
   };
 }

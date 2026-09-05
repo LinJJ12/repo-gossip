@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { config as loadDotenv } from "dotenv";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
-loadDotenv({ path: path.resolve(root, "../.env") });
+const repoRoot = path.resolve(root, "../..");
+loadDotenv({ path: path.resolve(repoRoot, ".env") });
 
 function gossipApiPlugin(): Plugin {
   return {
@@ -13,6 +14,11 @@ function gossipApiPlugin(): Plugin {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith("/api/gossip")) return next();
+        if (req.method !== "GET" && req.method !== "POST") {
+          res.statusCode = 405;
+          res.end(JSON.stringify({ error: "Method not allowed" }));
+          return;
+        }
 
         try {
           const url = new URL(req.url, "http://localhost");
@@ -22,16 +28,29 @@ function gossipApiPlugin(): Plugin {
 
           if (req.method === "POST") {
             const chunks: Buffer[] = [];
+            let size = 0;
             for await (const chunk of req) {
-              chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+              const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+              size += buf.length;
+              if (size > 64_000) {
+                res.statusCode = 413;
+                res.end(JSON.stringify({ error: "body too large" }));
+                return;
+              }
+              chunks.push(buf);
             }
-            const body = JSON.parse(
-              Buffer.concat(chunks).toString("utf8") || "{}",
-            ) as {
+            let body: {
               repo?: string;
               offline?: boolean;
               days?: number;
-            };
+            } = {};
+            try {
+              body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+            } catch {
+              res.statusCode = 400;
+              res.end(JSON.stringify({ error: "invalid JSON" }));
+              return;
+            }
             repo = body.repo ?? repo;
             if (typeof body.offline === "boolean") offline = body.offline;
             if (typeof body.days === "number") days = body.days;
@@ -45,7 +64,7 @@ function gossipApiPlugin(): Plugin {
           }
 
           const { runGossip } = await server.ssrLoadModule(
-            path.resolve(root, "../src/core/gossip.ts"),
+            path.resolve(repoRoot, "packages/core/src/gossip.ts"),
           );
 
           const result = await runGossip({
@@ -81,13 +100,16 @@ function gossipApiPlugin(): Plugin {
 export default defineConfig({
   root: path.resolve(root),
   plugins: [react(), gossipApiPlugin()],
+  resolve: {
+    alias: {
+      "@repo-gossip/core": path.resolve(repoRoot, "packages/core/src/index.ts"),
+    },
+  },
   server: {
     port: 5173,
     open: true,
-  },
-  resolve: {
-    alias: {
-      "@gossip": path.resolve(root, "../src"),
+    fs: {
+      allow: [repoRoot],
     },
   },
 });

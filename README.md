@@ -20,6 +20,26 @@
 
 ---
 
+## 目录结构
+
+npm workspaces monorepo（参考 OctoBot 等 `apps/` + `packages/`，`api/` 留在根目录以适配 Vercel）：
+
+```
+repo-gossip/
+├── packages/core/     # 八卦引擎：GitHub · 分析 · LLM · 排版 · CLI
+├── apps/
+│   ├── web/           # Vite React 预览站
+│   └── bot/           # Discord / Telegram / 飞书常驻进程
+├── api/               # Vercel Serverless 入口
+├── test/              # 核心单测
+├── docs/              # 架构说明
+└── package.json       # workspaces 根
+```
+
+详见 [docs/architecture.md](docs/architecture.md)。
+
+---
+
 ## 60 秒体验（无需 LLM）
 
 ```bash
@@ -36,8 +56,6 @@ npm run gossip -- https://github.com/vercel/next.js --offline
 
 有 LLM Key 时去掉 `--offline`，翻译会从「土味模板」升级成完整八卦笔力。
 
-兼容任意 OpenAI Chat Completions 接口（OpenAI / DeepSeek / 硅基流动 / 代理等）：
-
 ```env
 LLM_API_KEY=sk-...
 LLM_BASE_URL=https://api.openai.com/v1
@@ -47,30 +65,30 @@ GITHUB_TOKEN=ghp_...   # 可选；提高限额或读私有仓
 
 ---
 
-## 架构
+## 架构数据流
 
 ```
 仓库链接
    │
    ▼
-GitHub API (@octokit/rest) ──► 近 N 天 commits + 行数统计
+packages/core ──► GitHub 拉取 → 分析 → LLM/离线 → 小报
    │
-   ▼
-本地分析器 ──► 体温 / 颁奖 / 彩蛋 / 提名提交
-   │
-   ▼
-LLM（可关闭）──► 大片标题 · 废话翻译 · 收束金句
-   │
-   ▼
-富文本 / Discord Embed / 飞书卡片
+   ├── apps/web      预览站
+   ├── apps/bot      即时通讯 Bot
+   └── api/*         Serverless Webhook
 ```
 
-| 路径 | 用途 |
+---
+
+## 常用命令
+
+| 命令 | 说明 |
 |------|------|
-| `src/core/*` | 拉取、分析、生成、排版 |
-| `src/platforms/*` | Discord / Telegram / 飞书 |
-| `src/cli.ts` | 命令行小报 |
-| `api/*` | Vercel Serverless Webhook |
+| `npm run gossip -- owner/repo` | CLI 出报 |
+| `npm run web` | 启动预览站 |
+| `npm run bot` | 启动 Discord/Telegram 长连接 |
+| `npm test` | 跑核心单测 |
+| `npm run typecheck` | 全仓库类型检查 |
 
 ---
 
@@ -78,50 +96,27 @@ LLM（可关闭）──► 大片标题 · 废话翻译 · 收束金句
 
 ### Telegram
 
-1. 找 [@BotFather](https://t.me/BotFather) 创建 Bot，拿到 `TELEGRAM_BOT_TOKEN`
-2. 本地轮询：
-
-```bash
-TELEGRAM_BOT_TOKEN=xxx npm start
-```
-
-3. 或 Vercel：部署后把 Webhook 设为 `https://<你的域名>/api/telegram`
-
-```bash
-curl "https://api.telegram.org/bot<token>/setWebhook?url=https://<domain>/api/telegram"
-```
-
-群里发送 `/gossip owner/repo` 或直接丢 GitHub 链接。
+1. [@BotFather](https://t.me/BotFather) 创建 Bot，拿到 `TELEGRAM_BOT_TOKEN`
+2. 本地轮询：`TELEGRAM_BOT_TOKEN=xxx npm run bot`
+3. 或 Vercel Webhook：`https://<域名>/api/telegram`（建议配置 `TELEGRAM_WEBHOOK_SECRET`）
 
 ### Discord
 
-1. [Discord Developer Portal](https://discord.com/developers/applications) 创建应用 → Bot → Copy Token
-2. OAuth2 邀请 Bot（scope: `bot` + `applications.commands`）
-3. 常驻运行（推荐）：
-
-```bash
-DISCORD_BOT_TOKEN=xxx npm start
-```
-
-上线后使用 slash 命令：`/gossip repo:owner/repo`
+常驻：`DISCORD_BOT_TOKEN=xxx npm run bot`，使用 `/gossip repo:owner/repo`
 
 ### 飞书
 
-1. 飞书开放平台创建企业自建应用，开通机器人能力
-2. 事件订阅请求网址：`https://<domain>/api/feishu`
-3. 配置环境变量：`FEISHU_APP_ID` / `FEISHU_APP_SECRET` / `FEISHU_VERIFICATION_TOKEN`
-4. 在群里 @机器人 并发送仓库地址
+事件订阅：`https://<域名>/api/feishu`，配置 `FEISHU_APP_ID` / `FEISHU_APP_SECRET` / `FEISHU_VERIFICATION_TOKEN`
 
 ### HTTP API
 
 ```bash
-curl "https://<domain>/api/gossip?repo=vercel/next.js&offline=1"
 curl -X POST https://<domain>/api/gossip \
   -H "content-type: application/json" \
-  -d '{"repo":"vercel/next.js","format":"feishu"}'
+  -d '{"repo":"vercel/next.js","format":"web","offline":true}'
 ```
 
-`format`：`markdown`（默认）| `json` | `discord` | `feishu`
+`format`：`web`（默认，含 tabloid）| `markdown` | `json` | `discord` | `feishu`
 
 ---
 
@@ -129,18 +124,28 @@ curl -X POST https://<domain>/api/gossip \
 
 ### Vercel
 
+根目录直接 `npx vercel`（`api/` 在仓库根）。Dashboard **务必**填入：
+
+- `WEBHOOK_SECRET`（生产必填，保护 `/api/gossip`）
+- `GITHUB_TOKEN` / `LLM_API_KEY`（按需）
+- Bot 相关：`TELEGRAM_BOT_TOKEN` + `TELEGRAM_WEBHOOK_SECRET`，或飞书三件套
+
+调用受保护接口时：
+
 ```bash
-npx vercel
-# 在 Dashboard 填入 LLM_API_KEY、TELEGRAM_BOT_TOKEN 等
+curl -X POST https://<domain>/api/gossip \
+  -H "authorization: Bearer $WEBHOOK_SECRET" \
+  -H "content-type: application/json" \
+  -d '{"repo":"vercel/next.js","format":"web","offline":true}'
 ```
 
 无 LLM 演示可设 `GOSSIP_OFFLINE=1`。
 
-### Railway / 任意 Node 主机
+### Railway / 常驻 Bot
 
 ```bash
-npm run build
-DISCORD_BOT_TOKEN=xxx TELEGRAM_BOT_TOKEN=xxx node dist/index.js
+npm install
+DISCORD_BOT_TOKEN=xxx TELEGRAM_BOT_TOKEN=xxx npm run bot
 ```
 
 ---
@@ -151,18 +156,9 @@ DISCORD_BOT_TOKEN=xxx TELEGRAM_BOT_TOKEN=xxx node dist/index.js
 cp .env.example .env
 npm install
 npm run gossip -- owner/repo --offline
+npm test
 npm run typecheck
 ```
-
----
-
-## 为什么适合开源
-
-- **零重依赖**：不需要 FFmpeg，GitHub + LLM 就够
-- **部署简单**：CLI 本地玩，Serverless 24h 在线
-- **流量密码**：每人都会拿自己的仓来被吐槽一次
-
-欢迎 PR：更多彩蛋规则、周报定时推送、GitLab / Gitee 源、多语言小报……
 
 ## License
 

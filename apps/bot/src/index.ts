@@ -1,13 +1,22 @@
-import "dotenv/config";
+#!/usr/bin/env node
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { config as loadDotenv } from "dotenv";
 import { startDiscordBot } from "./platforms/discord.js";
 import { createTelegramBot } from "./platforms/telegram.js";
 
+loadDotenv({
+  path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../.env"),
+});
+
 /**
  * 长连接模式：适合本地 / Railway / 常驻进程。
- * Vercel Serverless 请用 /api/* webhook。
+ * Vercel Serverless 请用根目录 /api/* webhook。
  */
 async function main() {
-  const offline = process.argv.includes("--offline");
+  const offline =
+    process.argv.includes("--offline") ||
+    process.env.GOSSIP_OFFLINE === "1";
   const discordToken = process.env.DISCORD_BOT_TOKEN;
   const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
 
@@ -24,7 +33,7 @@ async function main() {
   if (telegramToken) {
     const bot = createTelegramBot(telegramToken, { offline });
     console.log("Telegram Bot 开始轮询…");
-    bot.start();
+    void bot.start();
   }
 }
 

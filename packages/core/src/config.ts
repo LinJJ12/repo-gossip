@@ -19,13 +19,13 @@ export function parseRepoRef(input: string): RepoRef {
     return { owner: short[1]!, repo: short[2]! };
   }
   throw new Error(
-    `无法解析仓库地址：「${input}」。请使用 owner/repo 或 https://github.com/owner/repo`,
+    `Cannot parse repo: "${input}". Use owner/repo or https://github.com/owner/repo`,
   );
 }
 
 export const envSchema = z.object({
   GITHUB_TOKEN: z.string().optional(),
-  LLM_API_KEY: z.string().min(1, "需要 LLM_API_KEY"),
+  LLM_API_KEY: z.string().optional(),
   LLM_BASE_URL: z.string().default("https://api.openai.com/v1"),
   LLM_MODEL: z.string().default("gpt-4o-mini"),
   DISCORD_BOT_TOKEN: z.string().optional(),

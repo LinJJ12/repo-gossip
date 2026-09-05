@@ -5,7 +5,7 @@ import type {
   EasterEgg,
   RepoSnapshot,
   Temperature,
-} from "../types.js";
+} from "./types.js";
 
 const EGG_PATTERNS: {
   re: RegExp;
@@ -14,28 +14,28 @@ const EGG_PATTERNS: {
 }[] = [
   {
     re: /console\.log\s*\(\s*['"`]?(?:test|debug|todo|wtf|aaa+|here)/i,
-    tag: "有内鬼，终止交易！",
-    emoji: "🕵️",
+    tag: "\u6709\u5185\u9b3c\uff0c\u7ec8\u6b62\u4ea4\u6613\uff01",
+    emoji: "\uD83D\uDD75\uFE0F",
   },
   {
     re: /\bTODO\b|\bFIXME\b|\bHACK\b/,
-    tag: "技术债催收员已上门",
-    emoji: "💸",
+    tag: "\u6280\u672f\u503a\u50ac\u6536\u5458\u5df2\u4e0a\u95e8",
+    emoji: "\uD83D\uDCB8",
   },
   {
     re: /\bpassword\s*=\s*['"][^'"]+['"]|\bapi[_-]?key\s*=\s*['"][^'"]+['"]/i,
-    tag: "密钥裸奔现场",
-    emoji: "🚨",
+    tag: "\u5bc6\u94a5\u88f8\u5954\u73b0\u573a",
+    emoji: "\uD83D\uDEA8",
   },
   {
-    re: /\bany\b|as unknown as|@ts-ignore|eslint-disable/i,
-    tag: "类型系统已投降",
-    emoji: "🏳️",
+    re: /\bas unknown as\b|@ts-ignore|eslint-disable/i,
+    tag: "\u7c7b\u578b\u7cfb\u7edf\u5df2\u6295\u964d",
+    emoji: "\uD83C\uDFF3\uFE0F",
   },
   {
-    re: /fuck|shit|wtf|草泥马|卧槽|妈的/i,
-    tag: "提交信息带脏字（情绪真挚）",
-    emoji: "🤬",
+    re: /fuck|shit|wtf/i,
+    tag: "\u63d0\u4ea4\u4fe1\u606f\u5e26\u810f\u5b57",
+    emoji: "\uD83E\uDD2C",
   },
 ];
 
@@ -69,8 +69,8 @@ function calcTemperature(commits: CommitStat[]): Temperature {
   if (daysSinceLastCommit !== null && daysSinceLastCommit >= 14) {
     return {
       level: "frozen",
-      label: "已凉",
-      emoji: "🥶",
+      label: "\u5df2\u51c9",
+      emoji: "\uD83E\uDD76",
       commitsLast3Days,
       daysSinceLastCommit,
     };
@@ -78,8 +78,8 @@ function calcTemperature(commits: CommitStat[]): Temperature {
   if (commitsLast3Days > 20) {
     return {
       level: "blazing",
-      label: "热得发烫",
-      emoji: "🔥",
+      label: "\u70ed\u5f97\u53d1\u70eb",
+      emoji: "\uD83D\uDD25",
       commitsLast3Days,
       daysSinceLastCommit,
     };
@@ -87,25 +87,28 @@ function calcTemperature(commits: CommitStat[]): Temperature {
   if (commitsLast3Days >= 5) {
     return {
       level: "warm",
-      label: "微微出汗",
-      emoji: "🌡️",
+      label: "\u5fae\u5fae\u51fa\u6c57",
+      emoji: "\uD83C\uDF21\uFE0F",
       commitsLast3Days,
       daysSinceLastCommit,
     };
   }
-  if (commitsLast3Days >= 1 || (daysSinceLastCommit !== null && daysSinceLastCommit < 7)) {
+  if (
+    commitsLast3Days >= 1 ||
+    (daysSinceLastCommit !== null && daysSinceLastCommit < 7)
+  ) {
     return {
       level: "cool",
-      label: "还在喘气",
-      emoji: "😮‍💨",
+      label: "\u8fd8\u5728\u5598\u6c14",
+      emoji: "\uD83D\uDE2E\u200D\uD83D\uDCA8",
       commitsLast3Days,
       daysSinceLastCommit,
     };
   }
   return {
     level: "frozen",
-    label: "已凉",
-    emoji: "🥶",
+    label: "\u5df2\u51c9",
+    emoji: "\uD83E\uDD76",
     commitsLast3Days,
     daysSinceLastCommit,
   };
@@ -117,18 +120,18 @@ function calcAwards(commits: CommitStat[]): Award[] {
   const awards: Award[] = [];
 
   const nightOwl = commits
-    .map((c) => ({ c, hour: new Date(c.date).getHours() }))
+    .map((c) => ({ c, hour: new Date(c.date).getUTCHours() }))
     .filter(({ hour }) => hour >= 0 && hour < 5)
     .sort((a, b) => a.hour - b.hour)[0];
   if (nightOwl) {
-    const h = new Date(nightOwl.c.date).getHours();
-    const m = new Date(nightOwl.c.date).getMinutes();
+    const h = new Date(nightOwl.c.date).getUTCHours();
+    const m = new Date(nightOwl.c.date).getUTCMinutes();
     awards.push({
       id: "night-owl",
-      title: "最佳卷王奖",
-      emoji: "🏆",
+      title: "\u6700\u4f73\u5377\u738b\u5956",
+      emoji: "\uD83C\uDFC6",
       winner: nightOwl.c.author,
-      reason: `${pad(h)}:${pad(m)} 还在提交「${truncate(nightOwl.c.message, 40)}」`,
+      reason: `${pad(h)}:${pad(m)} UTC still shipping \u300c${truncate(nightOwl.c.message, 40)}\u300d`,
     });
   }
 
@@ -138,10 +141,10 @@ function calcAwards(commits: CommitStat[]): Award[] {
   if (cleaner && cleaner.deletions > cleaner.additions && cleaner.deletions >= 20) {
     awards.push({
       id: "cleaner",
-      title: "代码清道夫奖",
-      emoji: "🧹",
+      title: "\u4ee3\u7801\u6e05\u9053\u592b\u5956",
+      emoji: "\uD83E\uDDF9",
       winner: cleaner.author,
-      reason: `删了 ${cleaner.deletions} 行，只加了 ${cleaner.additions} 行`,
+      reason: `-${cleaner.deletions} / +${cleaner.additions}`,
     });
   }
 
@@ -151,10 +154,10 @@ function calcAwards(commits: CommitStat[]): Award[] {
   if (dumpTruck && dumpTruck.additions + dumpTruck.deletions >= 200) {
     awards.push({
       id: "dump-truck",
-      title: "拆迁办特别奖",
-      emoji: "🏗️",
+      title: "\u62c6\u8fc1\u529e\u7279\u522b\u5956",
+      emoji: "\uD83C\uDFD7\uFE0F",
       winner: dumpTruck.author,
-      reason: `单次提交狂改 ${dumpTruck.additions + dumpTruck.deletions} 行`,
+      reason: `${dumpTruck.additions + dumpTruck.deletions} LOC touched`,
     });
   }
 
@@ -162,28 +165,26 @@ function calcAwards(commits: CommitStat[]): Award[] {
   if (byCount[0] && byCount[0].commits >= 3) {
     awards.push({
       id: "mvp",
-      title: "本周 MVP",
-      emoji: "⭐",
+      title: "\u672c\u5468 MVP",
+      emoji: "\u2B50",
       winner: byCount[0].name,
-      reason: `${byCount[0].commits} 次提交，队友还在看戏`,
+      reason: `${byCount[0].commits} commits`,
     });
   }
 
   const oneLiners = commits.filter(
     (c) =>
-      /^(fix|wip|tmp|misc|changes?|update|小改|改了下|修好了|测试一下)\s*$/i.test(
-        c.message,
-      ) ||
+      /^(fix|wip|tmp|misc|changes?|update)\s*$/i.test(c.message) ||
       /^(fix|chore|update):\s*(bug)?\s*$/i.test(c.message) ||
       c.message.length <= 8,
   );
   if (oneLiners[0]) {
     awards.push({
       id: "vague",
-      title: "废话文学金句奖",
-      emoji: "💬",
+      title: "\u5e9f\u8bdd\u6587\u5b66\u91d1\u53e5\u5956",
+      emoji: "\uD83D\uDCAC",
       winner: oneLiners[0].author,
-      reason: `原文：「${oneLiners[0].message}」—— 信息量约等于零`,
+      reason: `\u300c${oneLiners[0].message}\u300d`,
     });
   }
 
@@ -206,16 +207,15 @@ function findEasterEggs(commits: CommitStat[]): EasterEgg[] {
         break;
       }
     }
-  // 文件名含 debug 且提交信息很水，才算「有内鬼」
-  if (
-    /console\.log/.test(c.message) ||
-    (c.files.some((f) => /debug/i.test(f)) &&
-      /^(fix|wip|test|tmp|misc)\b/i.test(c.message))
-  ) {
+    if (
+      /console\.log/.test(c.message) ||
+      (c.files.some((f) => /debug/i.test(f)) &&
+        /^(fix|wip|test|tmp|misc)\b/i.test(c.message))
+    ) {
       if (!eggs.some((e) => e.sha === c.sha)) {
         eggs.push({
-          tag: "有内鬼，终止交易！",
-          emoji: "🕵️",
+          tag: "\u6709\u5185\u9b3c\uff0c\u7ec8\u6b62\u4ea4\u6613\uff01",
+          emoji: "\uD83D\uDD75\uFE0F",
           evidence: truncate(c.message, 60),
           sha: c.sha,
           author: c.author,
@@ -242,8 +242,8 @@ function pickNotable(commits: CommitStat[]): CommitStat[] {
     score:
       (c.additions + c.deletions) / 50 +
       (c.message.length < 12 ? 3 : 0) +
-      (/fix|bug|hotfix|urgent|紧急|救命/i.test(c.message) ? 4 : 0) +
-      (new Date(c.date).getHours() < 5 ? 2 : 0),
+      (/fix|bug|hotfix|urgent/i.test(c.message) ? 4 : 0) +
+      (new Date(c.date).getUTCHours() < 5 ? 2 : 0),
   }));
   return scored
     .sort((a, b) => b.score - a.score)
@@ -256,5 +256,5 @@ function pad(n: number) {
 }
 
 function truncate(s: string, n: number) {
-  return s.length <= n ? s : `${s.slice(0, n - 1)}…`;
+  return s.length <= n ? s : `${s.slice(0, n - 1)}\u2026`;
 }

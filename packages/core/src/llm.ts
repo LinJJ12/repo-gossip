@@ -1,4 +1,4 @@
-import type { AnalyzedGossip, Tabloid } from "../types.js";
+import type { AnalyzedGossip, Tabloid } from "./types.js";
 
 export type LlmConfig = {
   apiKey: string;
@@ -16,13 +16,12 @@ export async function generateTabloid(
 
   try {
     const raw = await chatCompletion(llm, [
-      {
-        role: "system",
-        content: SYSTEM_PROMPT,
-      },
+      { role: "system", content: SYSTEM_PROMPT },
       {
         role: "user",
-        content: `根据以下仓库事实，生成一份「项目八卦小报」JSON。\n\n${facts}`,
+        content:
+          "\u6839\u636e\u4ee5\u4e0b\u4ed3\u5e93\u4e8b\u5b9e\uff0c\u751f\u6210\u4e00\u4efd\u300c\u9879\u76ee\u516b\u5366\u5c0f\u62a5\u300dJSON\u3002\n\n" +
+          facts,
       },
     ]);
     return { tabloid: parseTabloidJson(raw, analyzed), mode: "llm" };
@@ -37,25 +36,8 @@ export async function generateTabloid(
   }
 }
 
-const SYSTEM_PROMPT = `你是一个给开源仓库写「八卦小报」的中文主编。风格：夸张、幽默、有史诗感，但绝不人身攻击、不造黄赌毒、不泄露密钥内容。
-
-必须只输出一个 JSON 对象（不要 Markdown 代码块），字段如下：
-{
-  "epicTitle": "电影感中文标题，带书名号，例如《深夜重构：十万行 Legacy Code 的救赎》",
-  "awardsNarrative": ["颁奖词字符串数组，每条对应一个奖，可润色但不要改赢家名字"],
-  "temperatureLine": "一句形容项目体温的话",
-  "translations": [
-    { "original": "原始提交信息", "drama": "废话文学夸张翻译", "author": "作者" }
-  ],
-  "easterEggLines": ["彩蛋侦探解说"],
-  "closing": "一句收束的毒舌或祝福"
-}
-
-要求：
-- epicTitle 要有电影海报感
-- translations 针对事实表里的 notable commits，3～5 条；把「fix: 修改 bug」这种废话翻译到极致
-- 如果 commits 为空，也要写出「仓库进入休眠」风格的小报
-- 全程中文`;
+const SYSTEM_PROMPT =
+  "You are a Chinese tabloid editor for GitHub repos. Be funny and epic, never insult people. Output ONE JSON object only with keys: epicTitle, awardsNarrative, temperatureLine, translations, easterEggLines, closing. All string values must be Chinese.";
 
 function buildFactSheet(a: AnalyzedGossip): string {
   const { snapshot: s, temperature: t, awards, easterEggs, topAuthors, notableCommits } =
@@ -124,23 +106,22 @@ async function chatCompletion(
 
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`LLM 请求失败 ${res.status}: ${text.slice(0, 300)}`);
+      throw new Error(`LLM request failed ${res.status}: ${text.slice(0, 300)}`);
     }
 
     const data = (await res.json()) as {
       choices?: { message?: { content?: string } }[];
     };
     const content = data.choices?.[0]?.message?.content;
-    if (!content) throw new Error("LLM 返回空内容");
+    if (!content) throw new Error("LLM returned empty content");
     return content;
   };
 
   try {
     return await attempt(true);
   } catch (err) {
-    // 部分兼容接口不支持 response_format，再试一次
     const msg = err instanceof Error ? err.message : "";
-    if (/response_format|json_object|400/.test(msg)) {
+    if (/response_format|json_object/i.test(msg)) {
       return await attempt(false);
     }
     throw err;
@@ -148,14 +129,22 @@ async function chatCompletion(
 }
 
 function parseTabloidJson(raw: string, analyzed: AnalyzedGossip): Tabloid {
-  const cleaned = raw.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
-  const parsed = JSON.parse(cleaned) as Partial<Tabloid>;
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const cleaned = (fenced?.[1] ?? raw).trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  const jsonText =
+    start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned;
+  const parsed = JSON.parse(jsonText) as Partial<Tabloid>;
 
   return {
     epicTitle: parsed.epicTitle || fallbackTitle(analyzed),
     awardsNarrative: Array.isArray(parsed.awardsNarrative)
       ? parsed.awardsNarrative.map(String)
-      : analyzed.awards.map((a) => `${a.emoji}「${a.title}」——${a.winner}（${a.reason}）`),
+      : analyzed.awards.map(
+          (a) =>
+            `${a.emoji}\u300c${a.title}\u300d\u2014\u2014${a.winner} (${a.reason})`,
+        ),
     temperatureLine:
       parsed.temperatureLine ||
       `${analyzed.temperature.emoji} ${analyzed.temperature.label}`,
@@ -169,72 +158,70 @@ function parseTabloidJson(raw: string, analyzed: AnalyzedGossip): Tabloid {
     easterEggLines: Array.isArray(parsed.easterEggLines)
       ? parsed.easterEggLines.map(String)
       : analyzed.easterEggs.map(
-          (e) => `${e.emoji} ${e.tag}——${e.author} 在 ${e.sha}：「${e.evidence}」`,
+          (e) =>
+            `${e.emoji} ${e.tag}\u2014\u2014${e.author} @ ${e.sha}: \u300c${e.evidence}\u300d`,
         ),
-    closing: parsed.closing || "本期八卦到此结束，仓库的秘密比你想的多。",
+    closing:
+      parsed.closing ||
+      "\u672c\u671f\u516b\u5366\u5230\u6b64\u7ed3\u675f\u3002",
     analyzed,
   };
 }
 
 function fallbackTabloid(analyzed: AnalyzedGossip): Tabloid {
-  const { snapshot, temperature, awards, easterEggs, notableCommits } = analyzed;
-  return {
+  const offline = {
     epicTitle: fallbackTitle(analyzed),
-    awardsNarrative: awards.map(
-      (a) => `${a.emoji}「${a.title}」——${a.winner}（${a.reason}）`,
+    awardsNarrative: analyzed.awards.map(
+      (a) =>
+        `${a.emoji}\u300c${a.title}\u300d\u2014\u2014${a.winner} (${a.reason})`,
     ),
-    temperatureLine: `${temperature.emoji}「${temperature.label}」——近 3 天 ${temperature.commitsLast3Days} 次提交${
-      temperature.daysSinceLastCommit !== null
-        ? `，距上次提交 ${temperature.daysSinceLastCommit} 天`
-        : ""
-    }`,
-    translations: notableCommits.slice(0, 5).map((c) => ({
+    temperatureLine: `${analyzed.temperature.emoji}\u300c${analyzed.temperature.label}\u300d`,
+    translations: analyzed.notableCommits.slice(0, 5).map((c) => ({
       original: c.message,
       drama: dramatizeLocally(c.message),
       author: c.author,
     })),
-    easterEggLines: easterEggs.map(
-      (e) => `${e.emoji} ${e.tag}——${e.author} @ ${e.sha}：「${e.evidence}」`,
+    easterEggLines: analyzed.easterEggs.map(
+      (e) =>
+        `${e.emoji} ${e.tag}\u2014\u2014${e.author} @ ${e.sha}: \u300c${e.evidence}\u300d`,
     ),
     closing:
-      snapshot.commits.length === 0
-        ? "本期小报无素材：仓库正在装死，请投放更多 commits。"
-        : "（LLM 暂不可用，已切换本地土味翻译模式）八卦仍在继续。",
+      "\uff08LLM unavailable; local templates\uff09",
     analyzed,
   };
+  return offline;
 }
 
 function fallbackTitle(a: AnalyzedGossip): string {
   const name = a.snapshot.ref.repo;
   switch (a.temperature.level) {
     case "blazing":
-      return `《${name}：连续加班的七个日夜》`;
+      return `\u300a${name}\uff1a\u8fde\u7eed\u52a0\u73ed\u7684\u4e03\u4e2a\u65e5\u591c\u300b`;
     case "warm":
-      return `《${name} 的微热午后》`;
+      return `\u300a${name} \u7684\u5fae\u70ed\u5348\u540e\u300b`;
     case "cool":
-      return `《${name}：还能抢救一下》`;
+      return `\u300a${name}\uff1a\u8fd8\u80fd\u62a2\u6551\u4e00\u4e0b\u300b`;
     default:
-      return `《${name}：冰封仓库的漫长冬天》`;
+      return `\u300a${name}\uff1a\u51b0\u5c01\u4ed3\u5e93\u7684\u6f2b\u957f\u51ac\u5929\u300b`;
   }
 }
 
-/** 无 LLM 时的土味翻译，保证 CLI 也能出活 */
 export function dramatizeLocally(message: string): string {
   const m = message.trim();
   if (/^(fix|bugfix|hotfix)/i.test(m)) {
-    return `开发者在键盘冒烟的夜晚，独自堵住了一处足以让产品经理半夜惊醒的致命隐患：「${m}」`;
+    return `\u5f00\u53d1\u8005\u5728\u952e\u76d8\u5192\u70df\u7684\u591c\u665a\u4fee\u590d\u4e86\u81f4\u547d\u9690\u60a3\uff1a\u300c${m}\u300d`;
   }
   if (/^(feat|feature|add)/i.test(m)) {
-    return `一声惊雷：仓库迎来新能力。史官记下：「${m}」——后人将歌颂这一刻。`;
+    return `\u4ed3\u5e93\u8fce\u6765\u65b0\u80fd\u529b\uff1a\u300c${m}\u300d`;
   }
-  if (/^(refactor|重构)/i.test(m)) {
-    return `在无人鼓掌的舞台上，有人默默拆掉了 legacy 的承重墙：「${m}」`;
+  if (/^(refactor)/i.test(m)) {
+    return `\u6709\u4eba\u9ed8\u9ed8\u62c6\u6389\u4e86 legacy\uff1a\u300c${m}\u300d`;
   }
   if (/^(wip|tmp|test|misc|update|chore)/i.test(m) || m.length <= 8) {
-    return `提交信息写了「${m}」。翻译：我改了东西，但我不想解释，你自己看 diff 吧。`;
+    return `\u63d0\u4ea4\u4fe1\u606f\u5199\u4e86\u300c${m}\u300d\u3002\u7ffb\u8bd1\uff1a\u6211\u6539\u4e86\uff0c\u4f46\u6211\u4e0d\u60f3\u89e3\u91ca\u3002`;
   }
-  if (/删除|remove|delete|cleanup|清道/i.test(m)) {
-    return `清道夫出动，代码坟场又多了一排墓碑：「${m}」`;
+  if (/remove|delete|cleanup/i.test(m)) {
+    return `\u6e05\u9053\u592b\u51fa\u52a8\uff1a\u300c${m}\u300d`;
   }
-  return `当事人轻描淡写地写道「${m}」。知情人士透露：事情远没有这么简单。`;
+  return `\u5f53\u4e8b\u4eba\u8f7b\u63cf\u6de1\u5199\u9053\u300c${m}\u300d\u3002\u77e5\u60c5\u4eba\u58eb\u900f\u9732\uff1a\u4e8b\u60c5\u8fdc\u6ca1\u6709\u8fd9\u4e48\u7b80\u5355\u3002`;
 }

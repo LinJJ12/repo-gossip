@@ -8,8 +8,7 @@ import {
   EmbedBuilder,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { runGossip } from "../core/gossip.js";
-import { toDiscordEmbed } from "../core/format.js";
+import { runGossip, toDiscordEmbed } from "@repo-gossip/core";
 
 export async function startDiscordBot(
   token: string,
