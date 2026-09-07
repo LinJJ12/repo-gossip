@@ -72,6 +72,9 @@
           </form>
 
           <div class="examples">
+            <button type="button" class="chip chip-recent" id="nav-recent" aria-expanded="false" aria-controls="recent-history">
+              最近
+            </button>
             <button type="button" class="chip" data-repo="sindresorhus/is">
               sindresorhus/is
             </button>
@@ -79,6 +82,8 @@
               facebook/react
             </button>
           </div>
+
+          <div id="recent-history" class="recent-history" hidden></div>
 
           <p id="compose-error" class="error" hidden></p>
         </header>
@@ -166,6 +171,7 @@
       </section>
     </div>
 
+    <script src="history-logic.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

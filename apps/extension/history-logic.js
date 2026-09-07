@@ -6,6 +6,8 @@
   const DEFAULT_LIMIT = 20;
   const TEMP_LEVELS = new Set(["blazing", "warm", "cool", "frozen"]);
   const REPO_KEY_RE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+  const GITHUB_URL =
+    /(?:https?:\/\/)?(?:www\.)?github\.com\/([^/\s]+)\/([^/\s#?]+)/i;
 
   /**
    * @param {unknown} repo
@@ -16,6 +18,27 @@
     const trimmed = repo.trim();
     if (!REPO_KEY_RE.test(trimmed)) return null;
     return trimmed.toLowerCase();
+  }
+
+  /**
+   * Prefer owner/repo; else GitHub URL; else snapshot.fullName.
+   * @param {unknown} input
+   * @param {any} [data]
+   * @returns {string | null}
+   */
+  function resolveRepoKey(input, data) {
+    const direct = normalizeRepoKey(input);
+    if (direct) return direct;
+    if (typeof input === "string") {
+      const m = input.trim().match(GITHUB_URL);
+      if (m) {
+        const fromUrl = normalizeRepoKey(
+          `${m[1]}/${String(m[2]).replace(/\.git$/i, "")}`,
+        );
+        if (fromUrl) return fromUrl;
+      }
+    }
+    return normalizeRepoKey(data?.tabloid?.analyzed?.snapshot?.fullName);
   }
 
   /**
@@ -58,7 +81,7 @@
    * @returns {any | null}
    */
   function findHistoryEntry(list, repo) {
-    const key = normalizeRepoKey(repo);
+    const key = normalizeRepoKey(repo) || resolveRepoKey(repo);
     if (!key) return null;
     return list.find((e) => e && normalizeRepoKey(e.repo) === key) || null;
   }
@@ -144,7 +167,7 @@
    * @param {number} [savedAt]
    */
   function buildHistoryEntry(repo, data, savedAt = Date.now()) {
-    const key = normalizeRepoKey(repo);
+    const key = resolveRepoKey(repo, data);
     const slim = slimGossipData(data);
     if (!key || !slim) return null;
     return {
@@ -180,6 +203,7 @@
   root.RepoGossipHistoryLogic = {
     DEFAULT_LIMIT,
     normalizeRepoKey,
+    resolveRepoKey,
     sanitizeTempLevel,
     normalizeHistoryList,
     findHistoryEntry,

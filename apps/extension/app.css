@@ -258,6 +258,72 @@ select {
   border-color: rgba(214, 255, 60, 0.45);
 }
 
+.chip-recent.is-active {
+  color: var(--teal);
+  border-color: rgba(29, 226, 197, 0.55);
+  background: rgba(29, 226, 197, 0.1);
+}
+
+.recent-history {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+  text-align: left;
+}
+
+.recent-history[hidden] {
+  display: none;
+}
+
+.recent-history-empty {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.recent-history-item {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.22);
+  color: inherit;
+  padding: 0.65rem 0.75rem;
+  cursor: pointer;
+  font: inherit;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.recent-history-item:hover {
+  border-color: var(--teal);
+  background: rgba(29, 226, 197, 0.08);
+}
+
+.recent-history-item__repo {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.recent-history-item__title {
+  font-size: 0.88rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.recent-history-item__time {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+  opacity: 0.85;
+}
+
 .sample-banner {
   margin: 0 0 0.75rem;
   font-family: var(--font-mono);

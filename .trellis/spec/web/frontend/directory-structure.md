@@ -6,7 +6,8 @@ apps/web/
 ├── vite.config.ts          # React plugin + gossipApiPlugin + core alias
 └── src/
     ├── main.tsx            # StrictMode mount
-    ├── App.tsx             # Hero form, fetch, mode/error UX
+    ├── App.tsx             # Hero form, fetch, 「最近」, mode/error UX
+    ├── history.ts          # localStorage history (normalize / slim / upsert)
     ├── TabloidView.tsx     # Presentational tabloid article
     ├── types.ts            # TabloidPayload / GossipMode (frontend mirror)
     ├── sample.ts           # Offline sample payload for first paint

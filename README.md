@@ -1,63 +1,44 @@
 # repo-gossip
 
-把 GitHub 仓库链接丢进去，拿到一份 **「项目八卦小报」**——不是 changelog，是气氛组。
+> 把 GitHub 仓库链接丢进去，拿走一份 **「项目八卦小报」** —— 不是 changelog，是气氛组。
 
-基于 **GitHub API +（可选）LLM**，支持 CLI、Web 预览站、Chrome 扩展，以及 Discord / Telegram / 飞书 Bot。可部署到 Vercel / Railway。
+基于 **GitHub API +（可选）LLM**：CLI、Web 预览站、Chrome 扩展，以及 Discord / Telegram / 飞书 Bot。可一键部署到 Vercel / Railway。
+
+<p align="left">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+  <a href="package.json"><img alt="Node.js" src="https://img.shields.io/badge/node-%E2%89%A518-brightgreen.svg"></a>
+  <a href="package.json"><img alt="npm workspaces" src="https://img.shields.io/badge/npm-workspaces-cb3837.svg"></a>
+</p>
+
+---
+
+## 小报里有什么
 
 | | |
 |---|---|
-| **许可证** | [MIT](LICENSE) |
-| **运行时** | Node.js ≥ 18 |
-| **包管理** | npm workspaces |
+| **本周大片标题** | 近期提交写成「影评式」标题 |
+| **颁奖典礼** | 卷王、夜猫子等趣味奖项 |
+| **项目体温** | 活跃度一眼可读 |
+| **提交信翻译** | commit message → 八卦文案 |
+| **彩蛋侦探** | 可疑调试痕迹等梗 |
+
+没有 LLM 也能出报：CLI 加 `--offline`，Web / 扩展关掉「调用 LLM」或勾选「仅本地模板」。
 
 ---
 
-## 目录
-
-- [功能一览](#功能一览)
-- [快速开始](#快速开始)
-- [使用方式](#使用方式)
-  - [Web 预览站](#1-web-预览站)
-  - [CLI](#2-cli)
-  - [Chrome 扩展](#3-chrome-扩展推荐本地试用)
-  - [即时通讯 Bot](#4-即时通讯-bot)
-  - [HTTP API](#5-http-api)
-- [环境变量](#环境变量)
-- [仓库结构](#仓库结构)
-- [开发与 CI](#开发与-ci)
-- [部署](#部署)
-- [安全说明](#安全说明)
-- [License](#license)
-
----
-
-## 功能一览
-
-| 板块 | 说明 |
-|------|------|
-| 本周大片标题 | 把近期提交写成「影评式」标题 |
-| 颁奖典礼 | 卷王、夜猫子等趣味奖项 |
-| 项目体温 | 活跃度一眼可读 |
-| 提交信翻译 | 把 commit message 翻译成八卦文案 |
-| 彩蛋侦探 | 抓可疑调试痕迹等梗 |
-
-无 LLM 时也可用本地模板出报（`--offline` / 扩展勾选「仅本地模板」）。
-
----
-
-## 快速开始
+## 30 秒上手
 
 ```bash
 git clone https://github.com/LinJJ12/repo-gossip.git
 cd repo-gossip
-cp .env.example .env   # 按需填写 LLM / GitHub Token
+cp .env.example .env   # 按需填 GITHUB_TOKEN / LLM_*
 npm install
 npm run web
 ```
 
-浏览器打开 [http://localhost:5173](http://localhost:5173)，粘贴 `owner/repo` 或 GitHub URL 即可出报。
+打开 [http://localhost:5173](http://localhost:5173)，粘贴 `owner/repo` 或 GitHub URL → **出报**。
 
-不想起 Web 时：
+只要终端也行：
 
 ```bash
 npm run gossip -- vercel/next.js --offline
@@ -65,20 +46,32 @@ npm run gossip -- vercel/next.js --offline
 
 ---
 
-## 使用方式
+## 入口一览
 
-### 1. Web 预览站
+| 入口 | 适合 | 命令 / 路径 |
+|------|------|-------------|
+| **Web** | 本地预览、给同事试用 | `npm run web` |
+| **CLI** | 脚本 / 终端 | `npm run gossip -- owner/repo` |
+| **Chrome 扩展** | 日常刷 GitHub | [`apps/extension`](apps/extension/README.md) |
+| **Bot** | 群里随手问 | `npm run bot` |
+| **HTTP API** | 自建集成 | `POST /api/gossip` |
 
-适合本地预览或部署到 Vercel 后给同事试用。
+---
+
+## 使用说明
+
+### Web 预览站
 
 ```bash
-npm run web          # 开发：http://localhost:5173
+npm run web          # http://localhost:5173
 npm run web:build    # 生产构建
 ```
 
-页面上可调回溯天数、是否调用 LLM；请求打到同源 `/api/gossip`（开发时由 Vite 中间件提供）。
+- 可调回溯天数、是否调用 LLM
+- 请求走同源 `/api/gossip`（开发时由 Vite 中间件提供）
+- 出报成功后可点 **「最近」**，在本机回看缓存小报（`localStorage`，最多 20 条；与扩展不同步）
 
-### 2. CLI
+### CLI
 
 ```bash
 npm run gossip -- owner/repo
@@ -86,45 +79,52 @@ npm run gossip -- https://github.com/owner/repo --days 14
 npm run gossip -- owner/repo --offline
 ```
 
-### 3. Chrome 扩展（推荐本地试用）
+### Chrome 扩展
 
-仓库内自带开源 MV3 扩展（**不经过 Chrome 应用商店**，用「加载已解压的扩展程序」安装）。详细步骤见：
+开源 MV3，**不上架应用商店**——用「加载已解压的扩展程序」安装。
 
-**→ [apps/extension/README.md](apps/extension/README.md)**
+完整步骤 → **[apps/extension/README.md](apps/extension/README.md)**
 
 摘要：
 
-1. 先保证有可访问的八卦 API（本地：`npm run web` → `http://localhost:5173`，或你的 Vercel 域名）。
-2. Chrome 打开 `chrome://extensions` → 打开「开发者模式」→「加载已解压的扩展程序」→ 选择本仓库的 `apps/extension` 目录。
-3. 点击工具栏图标：在 **360px 弹层**里粘贴仓库地址出报；可进「设置」填写 API Base URL 与可选 BYOK。
-4. 打开任意 GitHub 仓库页：右上角可拖动的「八卦小报」按钮，点击即可出报。
-5. 弹层内「完整页面」可打开大屏阅读界面。
+1. 先有可访问的 API（本地 `npm run web`，或你的 Vercel 域名）
+2. `chrome://extensions` → 开发者模式 → 加载 `apps/extension`
+3. 工具栏弹层粘贴仓库出报；GitHub 仓库页有可拖动的「八卦小报」按钮
+4. **「最近」** 在弹层 / 完整页 / 侧边栏共用同一份本机历史（`chrome.storage.local`）
 
-密钥只保存在本机 `chrome.storage.local`，出报时通过请求头发给你配置的 API，不写入本仓库服务端数据库。
+### 即时通讯 Bot
 
-### 4. 即时通讯 Bot
-
-#### Telegram
+<details>
+<summary><strong>Telegram</strong></summary>
 
 1. [@BotFather](https://t.me/BotFather) 创建 Bot，取得 `TELEGRAM_BOT_TOKEN`
 2. 本地轮询：`TELEGRAM_BOT_TOKEN=xxx npm run bot`
-3. 或配置 Webhook：`https://<域名>/api/telegram`（建议同时设 `TELEGRAM_WEBHOOK_SECRET`）
+3. 或 Webhook：`https://<域名>/api/telegram`（建议同时设 `TELEGRAM_WEBHOOK_SECRET`）
 
-#### Discord
+</details>
+
+<details>
+<summary><strong>Discord</strong></summary>
 
 ```bash
 DISCORD_BOT_TOKEN=xxx npm run bot
 ```
 
-使用斜杠命令 `/gossip repo:owner/repo`。  
-**注意：** `/api/discord` Interactions Webhook 仍为 501，请用常驻 Bot，不要配置 Interactions Endpoint。
+斜杠命令：`/gossip repo:owner/repo`
 
-#### 飞书
+> `/api/discord` Interactions Webhook 仍为 **501**。请用常驻 Bot，不要配置 Interactions Endpoint。
 
-事件订阅 URL：`https://<域名>/api/feishu`  
-配置：`FEISHU_APP_ID` / `FEISHU_APP_SECRET` / `FEISHU_VERIFICATION_TOKEN`
+</details>
 
-### 5. HTTP API
+<details>
+<summary><strong>飞书</strong></summary>
+
+- 事件订阅：`https://<域名>/api/feishu`
+- 配置：`FEISHU_APP_ID` / `FEISHU_APP_SECRET` / `FEISHU_VERIFICATION_TOKEN`
+
+</details>
+
+### HTTP API
 
 ```bash
 curl -X POST https://<domain>/api/gossip \
@@ -135,11 +135,11 @@ curl -X POST https://<domain>/api/gossip \
 | 字段 | 说明 |
 |------|------|
 | `repo` | `owner/repo` 或 GitHub URL |
-| `format` | `web`（默认）\| `markdown` \| `json` \| `discord` \| `feishu` |
-| `days` | 1–90，回溯窗口 |
+| `format` | `web`（默认）· `markdown` · `json` · `discord` · `feishu` |
+| `days` | 1–90 |
 | `offline` | `true` 时不调 LLM |
 
-可选 **BYOK** 请求头（优先于服务端环境变量，不会写入日志/响应体）：
+可选 **BYOK** 请求头（优先于服务端环境变量，不落日志 / 响应体）：
 
 | Header | 映射 |
 |--------|------|
@@ -148,23 +148,23 @@ curl -X POST https://<domain>/api/gossip \
 | `x-llm-base-url` | `LLM_BASE_URL` |
 | `x-llm-model` | `LLM_MODEL` |
 
-内部调用可带 `Authorization: Bearer $WEBHOOK_SECRET` 或 `x-webhook-secret`。公开路径有进程内限流与短时缓存；详见环境变量表。
+内部调用可带 `Authorization: Bearer $WEBHOOK_SECRET` 或 `x-webhook-secret`。公开路径有进程内限流与短时缓存。
 
 ---
 
 ## 环境变量
 
-复制 [`.env.example`](.env.example) 为 `.env`。常用项：
+复制 [`.env.example`](.env.example) → `.env`。常用项：
 
 | 变量 | 说明 |
 |------|------|
-| `GITHUB_TOKEN` | 可选；提高限额 / 读私有仓 |
-| `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` | 兼容 OpenAI Chat Completions 的服务 |
-| `GOSSIP_OFFLINE` | `1` 时强制本地模板 |
-| `WEBHOOK_SECRET` | 可选；内部调用校验 |
-| `GOSSIP_REQUIRE_WEBHOOK_SECRET` | `1` 时生产必须校验密钥 |
+| `GITHUB_TOKEN` | 提高限额 / 读私有仓 |
+| `LLM_API_KEY` · `LLM_BASE_URL` · `LLM_MODEL` | 兼容 OpenAI Chat Completions |
+| `GOSSIP_OFFLINE` | `1` 强制本地模板 |
+| `WEBHOOK_SECRET` | 内部调用校验（可选） |
+| `GOSSIP_REQUIRE_WEBHOOK_SECRET` | `1` 时生产强制鉴权 |
 | `GOSSIP_CORS_ORIGINS` | CORS，逗号分隔或 `*` |
-| `GOSSIP_RATE_LIMIT_*` / `GOSSIP_CACHE_TTL_SEC` | 公开 API 限流与缓存 |
+| `GOSSIP_RATE_LIMIT_*` · `GOSSIP_CACHE_TTL_SEC` | 限流与缓存 |
 
 Bot 相关变量见 `.env.example` 注释。
 
@@ -172,33 +172,33 @@ Bot 相关变量见 `.env.example` 注释。
 
 ## 仓库结构
 
-```
+```text
 repo-gossip/
 ├── packages/core/     # 八卦引擎：GitHub · 分析 · LLM · 排版 · CLI
 ├── apps/
-│   ├── web/           # Vite + React 预览站
-│   ├── bot/           # Discord / Telegram / 飞书常驻进程
-│   └── extension/     # Chrome MV3 扩展（sideload）
-├── api/               # Vercel Serverless 入口
-├── test/              # 核心单测
+│   ├── web/           # Vite + React 预览站（含本机「最近」）
+│   ├── bot/           # Discord / Telegram / 飞书
+│   └── extension/     # Chrome MV3（sideload）
+├── api/               # Vercel Serverless
+├── test/              # 单测
 ├── docs/              # 架构说明
 └── package.json
 ```
 
-架构细节：[docs/architecture.md](docs/architecture.md)
+更多：[docs/architecture.md](docs/architecture.md)
 
 ---
 
-## 开发与 CI
+## 开发
 
 ```bash
 npm install
-npm test              # 核心单测
-npm run typecheck     # core / bot / web
+npm test
+npm run typecheck
 npm run gossip -- owner/repo --offline
 ```
 
-| 命令 | 说明 |
+| 命令 | 作用 |
 |------|------|
 | `npm run gossip -- …` | CLI 出报 |
 | `npm run web` | 预览站 |
@@ -206,30 +206,37 @@ npm run gossip -- owner/repo --offline
 | `npm test` | 单测 |
 | `npm run typecheck` | 类型检查 |
 
-Push / PR 会跑 `npm test` 与 `npm run typecheck`（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）。
+CI：Push / PR 跑 `npm test` 与 `npm run typecheck`（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）。
 
 ---
 
 ## 部署
 
-| 入口 | 说明 |
-|------|------|
-| **Vercel（Web + API）** | 根目录 `npx vercel`；静态站来自 `apps/web`，`/api/*` 为 Serverless |
+| 入口 | 怎么做 |
+|------|--------|
+| **Vercel**（Web + API） | 根目录 `npx vercel`；静态来自 `apps/web`，`/api/*` 为 Serverless |
 | **Chrome 扩展** | 加载 `apps/extension`；API Base URL 指向你的后端 |
 | **常驻 Bot** | `npm run bot`（Railway 等） |
 
-Vercel Dashboard 建议配置：`GITHUB_TOKEN`、`LLM_API_KEY`（或依赖 BYOK）、按需 `WEBHOOK_SECRET` / CORS / 限流相关变量。无 LLM 演示可设 `GOSSIP_OFFLINE=1`。
+建议在宿主环境配置 `GITHUB_TOKEN`、`LLM_API_KEY`（或依赖 BYOK）。纯演示可设 `GOSSIP_OFFLINE=1`。
 
 ---
 
-## 安全说明
+## 安全
 
-- 不要把 `WEBHOOK_SECRET`、LLM Key、GitHub Token 写进扩展源码或提交进 Git。
-- 扩展 BYOK 仅存用户本机；请求经你配置的 API Base URL 发出。
-- 公开 `/api/gossip` 默认可不带 Webhook 密钥；生产若需强制鉴权，设 `GOSSIP_REQUIRE_WEBHOOK_SECRET=1`。
+- 不要把 `WEBHOOK_SECRET`、LLM Key、GitHub Token 写进扩展源码或提交进 Git
+- 扩展 BYOK 只存在本机；请求只发往你配置的 API Base URL
+- 公开 `/api/gossip` 默认可不带 Webhook 密钥；生产若要强制鉴权，设 `GOSSIP_REQUIRE_WEBHOOK_SECRET=1`
+- Web「最近」与扩展「最近」互不同步（浏览器存储隔离）
 
 ---
 
 ## License
 
 [MIT](LICENSE)
+
+---
+
+## 致谢
+
+感谢 [LINUX DO](https://linux.do) 社区的推广支持，以及佬友们的反馈。

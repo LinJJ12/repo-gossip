@@ -1,0 +1,6 @@
+{"file": ".trellis/spec/web/frontend/index.md", "reason": "Web package pre-dev checklist and quality gates"}
+{"file": ".trellis/spec/web/frontend/component-guidelines.md", "reason": "App vs TabloidView split; keep history UI in App shell"}
+{"file": ".trellis/spec/web/frontend/state-management.md", "reason": "Local useState pattern; fetch flow for generate"}
+{"file": ".trellis/spec/guides/extension-panel.md", "reason": "History storage contract and RepoGossipHistoryLogic rules for shared extension key"}
+{"file": ".trellis/tasks/09-07-web-history-localStorage/design.md", "reason": "Storage boundaries and UI/data flow for web vs extension"}
+{"file": ".trellis/tasks/09-07-web-history-localStorage/prd.md", "reason": "Acceptance criteria and shared-vs-separate storage decisions"}

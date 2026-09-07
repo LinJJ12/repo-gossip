@@ -8,6 +8,15 @@
  *   offline: boolean;
  * }} GossipSettings */
 
+importScripts("history-logic.js");
+
+const HistoryLogic = globalThis.RepoGossipHistoryLogic;
+const HISTORY_KEY = "repoGossipHistory";
+const HISTORY_LIMIT = HistoryLogic?.DEFAULT_LIMIT || 20;
+
+/** Serializes history RMW across popup / full page / content script. */
+let historyWriteChain = Promise.resolve();
+
 const DEFAULTS = {
   apiBaseUrl: "http://localhost:5173",
   githubToken: "",
@@ -24,6 +33,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse({ ok: true });
     return true;
   }
+  if (message?.type === "HISTORY_UPSERT") {
+    void (async () => {
+      try {
+        const list = await upsertHistoryFromData(message.repo, message.data);
+        sendResponse({ ok: true, list });
+      } catch (err) {
+        sendResponse({
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    })();
+    return true;
+  }
   if (message?.type !== "GOSSIP_FETCH") return false;
   void (async () => {
     try {
@@ -38,6 +61,66 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   })();
   return true;
 });
+
+/**
+ * @param {() => Promise<T>} fn
+ * @template T
+ * @returns {Promise<T>}
+ */
+function withHistoryLock(fn) {
+  const run = historyWriteChain.then(fn, fn);
+  historyWriteChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
+/**
+ * @returns {Promise<any[]>}
+ */
+async function loadHistory() {
+  const stored = await chrome.storage.local.get({ [HISTORY_KEY]: [] });
+  return HistoryLogic
+    ? HistoryLogic.normalizeHistoryList(stored[HISTORY_KEY])
+    : Array.isArray(stored[HISTORY_KEY])
+      ? stored[HISTORY_KEY]
+      : [];
+}
+
+/**
+ * @param {unknown} repo
+ * @param {unknown} data
+ * @returns {Promise<any[]>}
+ */
+async function upsertHistoryFromData(repo, data) {
+  if (!HistoryLogic) {
+    throw new Error("history-logic unavailable");
+  }
+  const entry = HistoryLogic.buildHistoryEntry(repo, data);
+  if (!entry) return loadHistory();
+  return withHistoryLock(async () => {
+    const list = await loadHistory();
+    const next = HistoryLogic.upsertHistoryList(list, entry, HISTORY_LIMIT);
+    try {
+      await chrome.storage.local.set({ [HISTORY_KEY]: next });
+      return next;
+    } catch (err) {
+      const trimmed = next.slice(0, Math.max(1, Math.floor(next.length / 2)));
+      try {
+        await chrome.storage.local.set({ [HISTORY_KEY]: trimmed });
+        return trimmed;
+      } catch (err2) {
+        console.warn(
+          "[repo-gossip] history save failed",
+          err2 instanceof Error ? err2.message : err2,
+          err instanceof Error ? err.message : err,
+        );
+        return list;
+      }
+    }
+  });
+}
 
 /**
  * Open or focus the full-page app (compose by default).

@@ -23,8 +23,15 @@ repo-gossip/
 ```
 repo URL
   → packages/core (fetch → analyze → LLM/offline → tabloid)
-  → apps/web | apps/bot | api/*
+  → apps/web | apps/bot | api/* | apps/extension
 ```
+
+### Client-side history（不经服务端）
+
+| Surface | Store | Notes |
+|---------|--------|--------|
+| Web「最近」 | `localStorage` · `repoGossipHistory` | 最多 20；与扩展不同步 |
+| Extension「最近」 | `chrome.storage.local` · `repoGossipHistory` | 侧边栏 / 弹层 / 完整页共用；写入经 background `HISTORY_UPSERT` |
 
 Secrets (`GITHUB_TOKEN`, `LLM_API_KEY`, bot tokens, optional `WEBHOOK_SECRET`) live only in root
 `.env` or host env vars — never in the frontend bundle. Per-request BYOK headers

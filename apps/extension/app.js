@@ -1,4 +1,14 @@
 (() => {
+  const HistoryLogic =
+    typeof globalThis !== "undefined"
+      ? globalThis.RepoGossipHistoryLogic
+      : null;
+  if (!HistoryLogic) {
+    console.error("[repo-gossip] history-logic.js missing; load before app.js");
+  }
+
+  const HISTORY_KEY = "repoGossipHistory";
+
   const DEFAULTS = {
     apiBaseUrl: "http://localhost:5173",
     githubToken: "",
@@ -42,9 +52,15 @@
   const goBtn = /** @type {HTMLButtonElement} */ (document.getElementById("go"));
   const composeError = document.getElementById("compose-error");
   const stage = document.getElementById("stage");
+  const recentBtn = /** @type {HTMLButtonElement | null} */ (
+    document.getElementById("nav-recent")
+  );
+  const recentPanel = document.getElementById("recent-history");
 
   /** @type {boolean} */
   let loading = false;
+  /** @type {boolean} */
+  let historyOpen = false;
 
   function currentView() {
     const h = (location.hash || "#compose").replace(/^#/, "");
@@ -300,9 +316,116 @@
         ? "主编正在写稿…"
         : "正在翻提交簿…"
       : "出报";
-    document.querySelectorAll(".chip").forEach((btn) => {
+    document.querySelectorAll(".chip[data-repo]").forEach((btn) => {
       /** @type {HTMLButtonElement} */ (btn).disabled = on;
     });
+    if (recentBtn) recentBtn.disabled = on;
+  }
+
+  /**
+   * @param {number} ts
+   */
+  function formatSavedAt(ts) {
+    const d = new Date(ts);
+    if (Number.isNaN(d.getTime())) return "";
+    const pad = (/** @type {number} */ n) => String(n).padStart(2, "0");
+    return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  /** @returns {Promise<any[]>} */
+  async function loadHistory() {
+    const stored = await chrome.storage.local.get({ [HISTORY_KEY]: [] });
+    return HistoryLogic
+      ? HistoryLogic.normalizeHistoryList(stored[HISTORY_KEY])
+      : Array.isArray(stored[HISTORY_KEY])
+        ? stored[HISTORY_KEY]
+        : [];
+  }
+
+  /**
+   * @param {string} repo
+   * @param {any} data
+   */
+  async function upsertHistoryFromData(repo, data) {
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: "HISTORY_UPSERT",
+        repo,
+        data,
+      });
+      if (!response?.ok) {
+        console.warn(
+          "[repo-gossip] history upsert failed",
+          response?.error || "unknown",
+        );
+      }
+    } catch (err) {
+      console.warn(
+        "[repo-gossip] history upsert failed",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
+  function setHistoryOpen(open) {
+    historyOpen = open;
+    if (recentBtn) {
+      recentBtn.classList.toggle("is-active", open);
+      recentBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+    if (recentPanel) recentPanel.hidden = !open;
+  }
+
+  async function renderHistoryList() {
+    if (!recentPanel) return;
+    const list = await loadHistory();
+    const usable = list.filter((e) => e && typeof e.repo === "string" && e.data);
+    if (!usable.length) {
+      recentPanel.innerHTML =
+        `<p class="recent-history-empty">还没有缓存的小报</p>`;
+      return;
+    }
+    recentPanel.innerHTML = usable
+      .map((e) => {
+        const title =
+          typeof e.epicTitle === "string" && e.epicTitle ? e.epicTitle : e.repo;
+        const time = formatSavedAt(Number(e.savedAt));
+        return `<button type="button" class="recent-history-item" data-repo="${escapeHtml(e.repo)}">
+          <span class="recent-history-item__repo">${escapeHtml(e.repo)}</span>
+          <span class="recent-history-item__title">${escapeHtml(title)}</span>
+          ${time ? `<span class="recent-history-item__time">${escapeHtml(time)}</span>` : ""}
+        </button>`;
+      })
+      .join("");
+    recentPanel.querySelectorAll(".recent-history-item").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const repo = btn.getAttribute("data-repo");
+        if (!repo || loading) return;
+        void (async () => {
+          const entry = HistoryLogic
+            ? HistoryLogic.findHistoryEntry(await loadHistory(), repo)
+            : (await loadHistory()).find((e) => e?.repo === repo);
+          if (!entry?.data) {
+            setError("这条缓存已损坏或丢失");
+            return;
+          }
+          setError("");
+          setHistoryOpen(false);
+          repoInput.value = entry.repo;
+          renderTabloid(entry.data);
+        })();
+      });
+    });
+  }
+
+  async function toggleHistory() {
+    if (historyOpen) {
+      setHistoryOpen(false);
+      return;
+    }
+    setError("");
+    setHistoryOpen(true);
+    await renderHistoryList();
   }
 
   function renderLoading() {
@@ -485,6 +608,7 @@
 
     setError("");
     setLoading(true);
+    setHistoryOpen(false);
     renderLoading();
     repoInput.value = trimmed;
 
@@ -498,6 +622,7 @@
         throw new Error(response?.error || "未知错误");
       }
       renderTabloid(response.data);
+      await upsertHistoryFromData(trimmed, response.data);
     } catch (err) {
       stage.innerHTML = "";
       setError(err instanceof Error ? err.message : String(err));
@@ -528,6 +653,10 @@
       const repo = btn.getAttribute("data-repo");
       if (repo) void generate(repo);
     });
+  });
+
+  recentBtn?.addEventListener("click", () => {
+    void toggleHistory();
   });
 
   composeDays.addEventListener("change", () => {

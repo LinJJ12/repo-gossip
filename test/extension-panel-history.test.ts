@@ -186,4 +186,18 @@ describe("extension history-logic", () => {
     assert.equal(findHistoryEntry(list, "Vercel/Next.js")?.plain, "drama");
     assert.equal(findHistoryEntry(list, "nope/nope"), null);
   });
+
+  it("buildHistoryEntry accepts GitHub URL via resolveRepoKey", () => {
+    const { resolveRepoKey } = loadLogic();
+    assert.equal(
+      resolveRepoKey("https://github.com/Vercel/Next.js"),
+      "vercel/next.js",
+    );
+    const entry = buildHistoryEntry(
+      "https://github.com/Vercel/Next.js",
+      sampleData("vercel/next.js", "drama"),
+    );
+    assert.ok(entry);
+    assert.equal(entry.repo, "vercel/next.js");
+  });
 });

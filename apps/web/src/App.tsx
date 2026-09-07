@@ -1,5 +1,12 @@
 import { useState, type FormEvent } from "react";
 import { TabloidView } from "./TabloidView";
+import {
+  formatSavedAt,
+  loadHistoryFromStorage,
+  slimGossipData,
+  type HistoryEntry,
+  upsertHistoryInStorage,
+} from "./history";
 import { SAMPLE_TABLOID } from "./sample";
 import type { GossipMode, TabloidPayload } from "./types";
 
@@ -11,6 +18,10 @@ const MODE_LABEL: Record<GossipMode, string> = {
   fallback: "LLM 失败，已回退本地模板",
 };
 
+function isGossipMode(mode: unknown): mode is GossipMode {
+  return mode === "llm" || mode === "offline" || mode === "fallback";
+}
+
 export function App() {
   const [repo, setRepo] = useState("pbakaus/impeccable");
   const [days, setDays] = useState(14);
@@ -19,6 +30,10 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<TabloidPayload | null>(SAMPLE_TABLOID);
   const [isSample, setIsSample] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<HistoryEntry[]>(() =>
+    loadHistoryFromStorage(),
+  );
 
   async function generate(target = repo) {
     const trimmed = target.trim();
@@ -29,6 +44,7 @@ export function App() {
     setLoading(true);
     setError(null);
     setIsSample(false);
+    setHistoryOpen(false);
     try {
       const res = await fetch("/api/gossip", {
         method: "POST",
@@ -43,6 +59,7 @@ export function App() {
       if (!res.ok) throw new Error(json.error || "八卦失败");
       setData(json);
       setRepo(trimmed);
+      setHistory(upsertHistoryInStorage(trimmed, json));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -53,7 +70,29 @@ export function App() {
   function showSample() {
     setError(null);
     setIsSample(true);
+    setHistoryOpen(false);
     setData(SAMPLE_TABLOID);
+  }
+
+  function toggleHistory() {
+    if (loading) return;
+    setError(null);
+    setHistory(loadHistoryFromStorage());
+    setHistoryOpen((open) => !open);
+  }
+
+  function openHistoryEntry(entry: HistoryEntry) {
+    const slim = slimGossipData(entry.data);
+    if (!slim?.tabloid?.analyzed) {
+      setError("这条缓存已损坏或丢失");
+      setHistory(loadHistoryFromStorage());
+      return;
+    }
+    setError(null);
+    setIsSample(false);
+    setHistoryOpen(false);
+    setRepo(entry.repo);
+    setData(slim);
   }
 
   function onSubmit(e: FormEvent) {
@@ -125,8 +164,23 @@ export function App() {
         </form>
 
         <div className="examples">
-          <button type="button" className="chip chip-sample" onClick={showSample}>
+          <button
+            type="button"
+            className="chip chip-sample"
+            disabled={loading}
+            onClick={showSample}
+          >
             看样报
+          </button>
+          <button
+            type="button"
+            className={`chip chip-recent${historyOpen ? " is-active" : ""}`}
+            aria-expanded={historyOpen}
+            aria-controls="recent-history"
+            disabled={loading}
+            onClick={toggleHistory}
+          >
+            最近
           </button>
           {EXAMPLES.map((ex) => (
             <button
@@ -139,6 +193,38 @@ export function App() {
               {ex}
             </button>
           ))}
+        </div>
+
+        <div
+          id="recent-history"
+          className="recent-history"
+          role="list"
+          hidden={!historyOpen}
+        >
+          {history.length === 0 ? (
+            <p className="recent-history-empty">还没有缓存的小报</p>
+          ) : (
+            history.map((entry) => {
+              const title = entry.epicTitle || entry.repo;
+              const time = formatSavedAt(entry.savedAt);
+              return (
+                <button
+                  key={`${entry.repo}-${entry.savedAt}`}
+                  type="button"
+                  className="recent-history-item"
+                  role="listitem"
+                  disabled={loading}
+                  onClick={() => openHistoryEntry(entry)}
+                >
+                  <span className="recent-history-item__repo">{entry.repo}</span>
+                  <span className="recent-history-item__title">{title}</span>
+                  {time ? (
+                    <span className="recent-history-item__time">{time}</span>
+                  ) : null}
+                </button>
+              );
+            })
+          )}
         </div>
 
         {error && (
@@ -173,7 +259,7 @@ export function App() {
                 当前为样报预览 · 勾选「调用 LLM」后点「出报」拉取真实仓库
               </p>
             )}
-            {!isSample && mode && (
+            {!isSample && isGossipMode(mode) && (
               <p
                 className={
                   mode === "llm" ? "sample-banner" : "sample-banner warn-banner"

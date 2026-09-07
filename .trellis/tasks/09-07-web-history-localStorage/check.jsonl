@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/web/frontend/index.md", "reason": "Web quality check and typecheck expectations"}
+{"file": ".trellis/spec/web/frontend/component-guidelines.md", "reason": "Verify history UI does not break brand/hero composition"}
+{"file": ".trellis/spec/guides/extension-panel.md", "reason": "Verify popup writes through same history contract as sidebar"}
+{"file": ".trellis/tasks/09-07-web-history-localStorage/prd.md", "reason": "Check AC1–AC4 including no Web↔extension sync"}
+{"file": ".trellis/tasks/09-07-web-history-localStorage/design.md", "reason": "Check storage key boundaries and slim payload compatibility"}

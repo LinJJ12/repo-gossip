@@ -8,7 +8,6 @@
   if (!HistoryLogic) {
     console.error("[repo-gossip] history-logic.js missing; load order broken");
   }
-  const HISTORY_LIMIT = HistoryLogic?.DEFAULT_LIMIT ?? 20;
 
   /** @type {string | null} */
   let boundRepo = null;
@@ -19,8 +18,6 @@
   let moTimer = null;
   /** Monotonic id so stale GOSSIP_FETCH responses cannot overwrite newer UI. */
   let gossipFetchSeq = 0;
-  /** Serializes history read-modify-write against chrome.storage.local. */
-  let historyWriteChain = Promise.resolve();
   /** @type {"report" | "history"} */
   let panelView = "report";
   /** @type {{ repo: string, data: any } | null} */
@@ -265,46 +262,28 @@
   }
 
   /**
-   * @param {() => Promise<T>} fn
-   * @template T
-   * @returns {Promise<T>}
-   */
-  function withHistoryLock(fn) {
-    const run = historyWriteChain.then(fn, fn);
-    historyWriteChain = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
-  }
-
-  /**
    * @param {string} repo
    * @param {any} data
    */
   async function upsertHistoryFromData(repo, data) {
-    if (!HistoryLogic) return;
-    const entry = HistoryLogic.buildHistoryEntry(repo, data);
-    if (!entry) return;
-    await withHistoryLock(async () => {
-      const list = await loadHistory();
-      const next = HistoryLogic.upsertHistoryList(list, entry, HISTORY_LIMIT);
-      try {
-        await chrome.storage.local.set({ [HISTORY_KEY]: next });
-      } catch (err) {
-        // Quota / serialization — drop oldest half and retry once.
-        const trimmed = next.slice(0, Math.max(1, Math.floor(next.length / 2)));
-        try {
-          await chrome.storage.local.set({ [HISTORY_KEY]: trimmed });
-        } catch (err2) {
-          console.warn(
-            "[repo-gossip] history save failed",
-            err2 instanceof Error ? err2.message : err2,
-            err instanceof Error ? err.message : err,
-          );
-        }
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: "HISTORY_UPSERT",
+        repo,
+        data,
+      });
+      if (!response?.ok) {
+        console.warn(
+          "[repo-gossip] history upsert failed",
+          response?.error || "unknown",
+        );
       }
-    });
+    } catch (err) {
+      console.warn(
+        "[repo-gossip] history upsert failed",
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
 
   /** @param {number} ts */
