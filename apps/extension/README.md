@@ -99,7 +99,8 @@ Edge / 其他 Chromium 同理。
 
 1. `chrome://extensions` → **打包扩展程序**
 2. 根目录选 `apps/extension`
-3. **不要**把 `.pem` 提交进 Git 或公开分享
+3. **不要**把 `.pem` 提交进 Git 或公开分享（仓库已 ignore `*.pem` / `*.crx`）
+4. 私钥请只放在本机安全位置；丢失或泄露后应视为该签名身份已不可信
 
 ---
 

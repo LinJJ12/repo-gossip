@@ -224,10 +224,13 @@ CI：Push / PR 跑 `npm test` 与 `npm run typecheck`（[`.github/workflows/ci.y
 
 ## 安全
 
-- 不要把 `WEBHOOK_SECRET`、LLM Key、GitHub Token 写进扩展源码或提交进 Git
+完整说明见 [SECURITY.md](SECURITY.md)。要点：
+
+- 不要把 `WEBHOOK_SECRET`、LLM Key、GitHub Token、扩展打包私钥（`*.pem`）写进源码或提交进 Git
 - 扩展 BYOK 只存在本机；请求只发往你配置的 API Base URL
 - 公开 `/api/gossip` 默认可不带 Webhook 密钥；生产若要强制鉴权，设 `GOSSIP_REQUIRE_WEBHOOK_SECRET=1`
 - Web「最近」与扩展「最近」互不同步（浏览器存储隔离）
+- 发现漏洞请走私密渠道报告，不要开公开 Issue 贴密钥
 
 ---
 

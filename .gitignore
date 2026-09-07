@@ -1,13 +1,30 @@
+# Dependencies & build
 node_modules/
 dist/
 **/dist/
 apps/web/dist/
+coverage/
+*.tsbuildinfo
+.turbo
+.vercel
+
+# Environment & secrets — never commit real credentials
 .env
 .env.*
 !.env.example
+*.pem
+*.crx
+*.p12
+*.pfx
+id_rsa
+id_rsa.*
+credentials.json
+**/service-account*.json
+
+# Logs & OS junk
 *.log
 .DS_Store
-.vercel
-.turbo
-coverage/
-*.tsbuildinfo
+Thumbs.db
+
+# Editor (keep shared recommendations if added later)
+.idea/
