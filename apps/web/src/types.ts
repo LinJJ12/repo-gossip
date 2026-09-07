@@ -5,6 +5,7 @@ export type GossipMode = "llm" | "offline" | "fallback";
 export type TabloidPayload = {
   mode?: GossipMode;
   llmError?: string;
+  warnings?: string[];
   tabloid: {
     epicTitle: string;
     awardsNarrative: string[];

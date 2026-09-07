@@ -1,3 +1,11 @@
 {
-  "version": 2
+  "version": 2,
+  "buildCommand": "npm run web:build",
+  "outputDirectory": "apps/web/dist",
+  "rewrites": [
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ]
 }

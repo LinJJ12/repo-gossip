@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/core/backend/pipeline.md", "reason": "verify mode/env still hold after API changes"}
+{"file": ".trellis/spec/core/backend/quality-guidelines.md", "reason": "secrets and root .env rules"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "cross-layer acceptance"}
+{"file": ".trellis/spec/web/frontend/quality-guidelines.md", "reason": "web production path checks"}

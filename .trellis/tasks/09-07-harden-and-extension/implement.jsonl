@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/core/backend/pipeline.md", "reason": "runGossip env/mode contract for BYOK"}
+{"file": ".trellis/spec/core/backend/error-handling.md", "reason": "API and GitHub failure surfacing"}
+{"file": ".trellis/spec/bot/backend/platforms.md", "reason": "webhook auth and adapter parity"}
+{"file": ".trellis/spec/web/frontend/state-management.md", "reason": "web fetch/settings patterns"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "extension → api → core flow"}

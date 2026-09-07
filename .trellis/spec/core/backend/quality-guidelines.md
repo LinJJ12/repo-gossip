@@ -27,6 +27,14 @@ File: `test/core.test.ts`
 - Requiring LLM for tests — offline/local templates must remain testable
 - Deep-importing core internals from apps when a public export would do
 - Putting secrets in source or frontend bundles
+- Logging or echoing BYOK / webhook secrets in API responses
+- Caching gossip responses without including `format` (and BYOK fingerprint) in the key
+
+## Public `/api/gossip` notes
+
+- Default is public (no `WEBHOOK_SECRET`); kill-switch `GOSSIP_REQUIRE_WEBHOOK_SECRET=1`
+- Serve cache **before** consuming rate-limit tokens
+- Clamp `days` with `clampGossipDays` (1–90)
 
 ## Env loading
 

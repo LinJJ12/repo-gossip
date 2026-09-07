@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/core/backend/pipeline.md", "reason": "runGossip env for BYOK"}
+{"file": ".trellis/spec/core/backend/error-handling.md", "reason": "API auth and error responses"}
+{"file": ".trellis/spec/core/backend/quality-guidelines.md", "reason": "secrets must not leak"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "web/api/core contract"}

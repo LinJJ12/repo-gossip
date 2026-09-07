@@ -29,7 +29,8 @@ repo-gossip/
 ├── packages/core/     # 八卦引擎：GitHub · 分析 · LLM · 排版 · CLI
 ├── apps/
 │   ├── web/           # Vite React 预览站
-│   └── bot/           # Discord / Telegram / 飞书常驻进程
+│   ├── bot/           # Discord / Telegram / 飞书常驻进程
+│   └── extension/     # Chrome MV3 开源扩展（sideload）
 ├── api/               # Vercel Serverless 入口
 ├── test/              # 核心单测
 ├── docs/              # 架构说明
@@ -90,6 +91,8 @@ packages/core ──► GitHub 拉取 → 分析 → LLM/离线 → 小报
 | `npm test` | 跑核心单测 |
 | `npm run typecheck` | 全仓库类型检查 |
 
+CI：push / PR 会跑 `npm test` 与 `npm run typecheck`（见 `.github/workflows/ci.yml`）。
+
 ---
 
 ## Bot 接入
@@ -110,6 +113,8 @@ packages/core ──► GitHub 拉取 → 分析 → LLM/离线 → 小报
 
 ### HTTP API
 
+公开路径（默认无需 `WEBHOOK_SECRET`）：
+
 ```bash
 curl -X POST https://<domain>/api/gossip \
   -H "content-type: application/json" \
@@ -118,26 +123,39 @@ curl -X POST https://<domain>/api/gossip \
 
 `format`：`web`（默认，含 tabloid）| `markdown` | `json` | `discord` | `feishu`
 
+可选 BYOK 请求头（优先级高于服务端 env，不会写入日志/响应）：
+
+| Header | 映射 |
+| --- | --- |
+| `x-github-token` | `GITHUB_TOKEN` |
+| `x-llm-api-key` | `LLM_API_KEY` |
+| `x-llm-base-url` | `LLM_BASE_URL` |
+| `x-llm-model` | `LLM_MODEL` |
+
+内部调用可带 `Authorization: Bearer $WEBHOOK_SECRET` 或 `x-webhook-secret`（仅当服务端配置了 `WEBHOOK_SECRET` 且值不匹配时返回 401）。紧急开关：`GOSSIP_REQUIRE_WEBHOOK_SECRET=1` 恢复「生产必须校验密钥」。CORS：`GOSSIP_CORS_ORIGINS`（逗号分隔）或 `*`。
+
+公开路径带进程内限流与短时缓存（多实例不共享）：**先查缓存再计限流**；超限返回 `429` + `Retry-After`。可用 `GOSSIP_RATE_LIMIT_IP_PER_HOUR`（默认 30）、`GOSSIP_RATE_LIMIT_REPO_PER_HOUR`（默认 60）、`GOSSIP_CACHE_TTL_SEC`（默认 600）调整；响应头 `X-Cache: HIT|MISS`。内部 Bearer 调用跳过 IP 限流。`days` 限制在 1–90。
+
 ---
 
 ## 部署
 
+### 生产入口怎么选
+
+| 入口 | 说明 |
+|------|------|
+| **Vercel（API + Web）** | 根目录 `npx vercel`：静态站来自 `apps/web` 构建，`/api/*` 走 Serverless。浏览器「出报」打同源 `/api/gossip`。 |
+| **Chrome 扩展（开源 sideload）** | 仓库内 `apps/extension`：Chrome「加载已解压的扩展程序」；Options 填 API Base URL 与可选 BYOK。不上架商店。 |
+| **常驻 Bot** | Discord / Telegram：`npm run bot`（Railway 等）。**Discord Interactions webhook（`/api/discord`）仍为 501**，请用长驻 Bot，不要配 Interactions Endpoint。 |
+
 ### Vercel
 
-根目录直接 `npx vercel`（`api/` 在仓库根）。Dashboard **务必**填入：
+根目录直接 `npx vercel`（`api/` 在仓库根；`vercel.json` 构建 Web 静态资源）。Dashboard 建议填入：
 
-- `WEBHOOK_SECRET`（生产必填，保护 `/api/gossip`）
-- `GITHUB_TOKEN` / `LLM_API_KEY`（按需）
+- `GITHUB_TOKEN` / `LLM_API_KEY`（按需；也可用 BYOK 头）
+- `WEBHOOK_SECRET`（可选，供内部调用；默认不强制）
+- `GOSSIP_REQUIRE_WEBHOOK_SECRET` / `GOSSIP_CORS_ORIGINS`（按需）
 - Bot 相关：`TELEGRAM_BOT_TOKEN` + `TELEGRAM_WEBHOOK_SECRET`，或飞书三件套
-
-调用受保护接口时：
-
-```bash
-curl -X POST https://<domain>/api/gossip \
-  -H "authorization: Bearer $WEBHOOK_SECRET" \
-  -H "content-type: application/json" \
-  -d '{"repo":"vercel/next.js","format":"web","offline":true}'
-```
 
 无 LLM 演示可设 `GOSSIP_OFFLINE=1`。
 
@@ -147,6 +165,12 @@ curl -X POST https://<domain>/api/gossip \
 npm install
 DISCORD_BOT_TOKEN=xxx TELEGRAM_BOT_TOKEN=xxx npm run bot
 ```
+
+---
+
+### Chrome 扩展（开源加载）
+
+见 [`apps/extension/README.md`](apps/extension/README.md)：开发者模式加载 `apps/extension`，在 GitHub 仓库页点「八卦小报」。不上架应用商店；可打包 `.crx` 分发。
 
 ---
 

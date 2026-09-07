@@ -20,6 +20,7 @@ export async function runGossip(options: GossipOptions): Promise<{
   message: PlatformMessage;
   mode: GossipMode;
   llmError?: string;
+  warnings?: string[];
 }> {
   const ref = parseRepoRef(options.repo);
   const githubToken = options.env?.GITHUB_TOKEN ?? process.env.GITHUB_TOKEN;
@@ -29,6 +30,11 @@ export async function runGossip(options: GossipOptions): Promise<{
     sinceDays: options.sinceDays ?? 14,
   });
   const analyzed = analyzeSnapshot(snapshot);
+  const warnings = snapshot.statsIncomplete
+    ? [
+        "部分提交详情拉取失败，增删行统计可能不完整（可能因 GitHub 限额或权限）",
+      ]
+    : undefined;
 
   const apiKey = options.env?.LLM_API_KEY ?? process.env.LLM_API_KEY;
   const wantOffline = options.offline || !apiKey;
@@ -42,6 +48,7 @@ export async function runGossip(options: GossipOptions): Promise<{
       llmError: options.offline
         ? undefined
         : "missing LLM_API_KEY; used local templates",
+      warnings,
     };
   }
 
@@ -57,6 +64,7 @@ export async function runGossip(options: GossipOptions): Promise<{
     message: formatTabloid(tabloid),
     mode,
     llmError,
+    warnings,
   };
 }
 

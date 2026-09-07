@@ -183,6 +183,11 @@ export function App() {
                 {data.llmError ? ` · ${data.llmError}` : ""}
               </p>
             )}
+            {!isSample && data.warnings && data.warnings.length > 0 && (
+              <p className="sample-banner warn-banner">
+                {data.warnings.join(" · ")}
+              </p>
+            )}
             <TabloidView data={data} />
           </>
         )}

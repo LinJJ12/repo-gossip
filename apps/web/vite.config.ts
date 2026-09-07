@@ -14,6 +14,26 @@ function gossipApiPlugin(): Plugin {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith("/api/gossip")) return next();
+
+        if (req.method === "OPTIONS") {
+          const { resolveCorsAllowOrigin, GOSSIP_CORS_ALLOW_HEADERS, GOSSIP_CORS_ALLOW_METHODS } =
+            await server.ssrLoadModule(
+              path.resolve(repoRoot, "packages/core/src/byok.ts"),
+            );
+          const origin = Array.isArray(req.headers.origin)
+            ? req.headers.origin[0]
+            : req.headers.origin;
+          res.statusCode = 204;
+          res.setHeader(
+            "Access-Control-Allow-Origin",
+            resolveCorsAllowOrigin(origin, process.env.GOSSIP_CORS_ORIGINS),
+          );
+          res.setHeader("Access-Control-Allow-Methods", GOSSIP_CORS_ALLOW_METHODS);
+          res.setHeader("Access-Control-Allow-Headers", GOSSIP_CORS_ALLOW_HEADERS);
+          res.end();
+          return;
+        }
+
         if (req.method !== "GET" && req.method !== "POST") {
           res.statusCode = 405;
           res.end(JSON.stringify({ error: "Method not allowed" }));
@@ -63,14 +83,27 @@ function gossipApiPlugin(): Plugin {
             return;
           }
 
-          const { runGossip } = await server.ssrLoadModule(
-            path.resolve(repoRoot, "packages/core/src/gossip.ts"),
+          const [{ runGossip }, { extractByokEnv, clampGossipDays }] =
+            await Promise.all([
+              server.ssrLoadModule(
+                path.resolve(repoRoot, "packages/core/src/gossip.ts"),
+              ),
+              server.ssrLoadModule(
+                path.resolve(repoRoot, "packages/core/src/index.ts"),
+              ),
+            ]);
+
+          const env = extractByokEnv(
+            req.headers as Record<string, string | string[] | undefined>,
           );
 
           const result = await runGossip({
             repo,
             offline,
-            sinceDays: Number.isFinite(days) ? days : 14,
+            sinceDays: clampGossipDays(
+              Number.isFinite(days) ? days : 14,
+            ),
+            env,
           });
 
           res.statusCode = 200;
@@ -81,6 +114,7 @@ function gossipApiPlugin(): Plugin {
               message: result.message,
               mode: result.mode,
               llmError: result.llmError,
+              warnings: result.warnings,
             }),
           );
         } catch (err) {

@@ -23,6 +23,8 @@ export type RepoSnapshot = {
   defaultBranch: string;
   commits: CommitStat[];
   fetchedAt: string;
+  /** True when some commit detail fetches failed (stats may be incomplete). */
+  statsIncomplete?: boolean;
 };
 
 export type Temperature = {

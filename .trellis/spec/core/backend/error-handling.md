@@ -5,9 +5,11 @@
 | Situation | Behavior | Reference |
 |-----------|----------|-----------|
 | Unparseable repo string | **Throw** `Error` with usage hint | `parseRepoRef` |
-| GitHub commit detail fetch fails | **Degrade**: use list payload via `toCommitStat` | `github.ts` `mapPool` try/catch |
+| GitHub 403/429 rate limit | **Retry** then **Throw** enriched message (`GITHUB_TOKEN` hint) | `github-retry.ts` / `withGithubRetry` |
+| GitHub commit detail fetch fails | **Degrade**: list payload + `statsIncomplete` → `warnings` | `github.ts` / `gossip.ts` |
 | Missing LLM key / `--offline` | **Degrade**: offline tabloid, optional `llmError` | `gossip.ts` |
 | LLM HTTP/parse failure | **Degrade**: `fallbackTabloid`, `mode: "fallback"`, log + `llmError` | `llm.ts` `generateTabloid` |
+| BYOK `x-llm-base-url` metadata/SSRF | **Drop** header (`isAllowedLlmBaseUrl`) | `byok.ts` |
 | CLI top-level failure | Print message to stderr, `process.exit(1)` | `cli.ts` |
 
 ## Zod env

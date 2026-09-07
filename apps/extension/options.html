@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>repo-gossip 设置</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+      body {
+        margin: 0;
+        padding: 24px;
+        max-width: 560px;
+      }
+      h1 {
+        font-size: 1.25rem;
+        margin: 0 0 0.5rem;
+      }
+      p {
+        color: #666;
+        font-size: 0.9rem;
+      }
+      label {
+        display: block;
+        margin: 12px 0 4px;
+        font-size: 0.85rem;
+        font-weight: 600;
+      }
+      input[type="text"],
+      input[type="password"],
+      input[type="url"],
+      input[type="number"] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 8px 10px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        margin-top: 12px;
+      }
+      button {
+        margin-top: 16px;
+        padding: 8px 14px;
+        border-radius: 6px;
+        border: 0;
+        background: #1f6feb;
+        color: #fff;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      #status {
+        margin-top: 10px;
+        font-size: 0.85rem;
+        color: #1a7f37;
+      }
+      code {
+        font-size: 0.85em;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>repo-gossip 设置</h1>
+    <p>
+      开源扩展：密钥只存在本机
+      <code>chrome.storage.local</code>，出报时以 BYOK 头发给你配置的 API（当次使用，不落服务端库）。
+    </p>
+
+    <label for="apiBaseUrl">API Base URL</label>
+    <input
+      id="apiBaseUrl"
+      type="url"
+      placeholder="http://localhost:5173 或 https://your-app.vercel.app"
+    />
+
+    <label for="githubToken">GitHub Token（可选）</label>
+    <input id="githubToken" type="password" autocomplete="off" />
+
+    <label for="llmApiKey">LLM API Key（可选）</label>
+    <input id="llmApiKey" type="password" autocomplete="off" />
+
+    <label for="llmBaseUrl">LLM Base URL（可选）</label>
+    <input id="llmBaseUrl" type="url" placeholder="https://api.openai.com/v1" />
+
+    <label for="llmModel">LLM Model（可选）</label>
+    <input id="llmModel" type="text" placeholder="gpt-4o-mini" />
+
+    <div class="row">
+      <label for="days">回溯天数</label>
+      <input id="days" type="number" min="1" max="90" value="14" style="width: 5rem" />
+      <label class="row" style="margin: 0">
+        <input id="offline" type="checkbox" />
+        仅本地模板（不调 LLM）
+      </label>
+    </div>
+
+    <button id="save" type="button">保存</button>
+    <div id="status" hidden>已保存</div>
+
+    <script src="options.js"></script>
+  </body>
+</html>
