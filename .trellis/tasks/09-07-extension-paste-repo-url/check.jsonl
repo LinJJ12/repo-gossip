@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "验收 compose/settings/content 是否仍走同一出报链路与 storage"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "检查是否重复实现 API 客户端或 parseRepo"}
+{"file": ".trellis/spec/web/frontend/component-guidelines.md", "reason": "对照小报章节与 compose 主控件是否对齐 web"}
+{"file": ".trellis/spec/web/frontend/quality-guidelines.md", "reason": "对照品牌与视觉反模式"}

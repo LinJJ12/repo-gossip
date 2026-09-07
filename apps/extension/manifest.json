@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "repo-gossip",
-  "version": "0.1.0",
-  "description": "在 GitHub 仓库页一键生成「项目八卦小报」。开源 sideload，可自填 API 与 BYOK。",
-  "permissions": ["storage"],
+  "version": "0.2.4",
+  "description": "粘贴 GitHub 仓库地址生成「项目八卦小报」。开源 sideload，可自填 API 与 BYOK。",
+  "permissions": ["storage", "tabs"],
   "host_permissions": [
     "https://github.com/*",
     "http://localhost/*",
@@ -15,8 +15,8 @@
     "type": "module"
   },
   "action": {
-    "default_title": "repo-gossip 设置",
-    "default_popup": "options.html"
+    "default_title": "repo-gossip 出报",
+    "default_popup": "popup.html"
   },
   "options_ui": {
     "page": "options.html",
@@ -29,5 +29,8 @@
       "css": ["content.css"],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' http://localhost:* http://127.0.0.1:* https:"
+  }
 }

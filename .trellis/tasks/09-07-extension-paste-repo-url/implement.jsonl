@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "出报页与 web/content 共用 GOSSIP 消息与字段，避免第二套解析/fetch"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "app 页 → background → /api/gossip 与 storage 读写竞态"}
+{"file": ".trellis/spec/web/frontend/index.md", "reason": "对齐 web 主路径：粘贴出报、品牌优先"}
+{"file": ".trellis/spec/web/frontend/component-guidelines.md", "reason": "镜像 App compose + TabloidView 章节结构"}
+{"file": ".trellis/spec/web/frontend/quality-guidelines.md", "reason": "editorial token、单列、非 dashboard"}

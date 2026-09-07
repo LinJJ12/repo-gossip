@@ -19,6 +19,11 @@ const DEFAULTS = {
 };
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "OPEN_APP") {
+    void openApp(message.view === "settings" ? "settings" : "compose");
+    sendResponse({ ok: true });
+    return true;
+  }
   if (message?.type !== "GOSSIP_FETCH") return false;
   void (async () => {
     try {
@@ -33,6 +38,25 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   })();
   return true;
 });
+
+/**
+ * Open or focus the full-page app (compose by default).
+ * @param {"compose" | "settings"} [view]
+ */
+async function openApp(view = "compose") {
+  const base = chrome.runtime.getURL("app.html");
+  const target = `${base}#${view === "settings" ? "settings" : "compose"}`;
+  const tabs = await chrome.tabs.query({});
+  const existing = tabs.find((t) => typeof t.url === "string" && t.url.startsWith(base));
+  if (existing?.id != null) {
+    await chrome.tabs.update(existing.id, { active: true, url: target });
+    if (existing.windowId != null) {
+      await chrome.windows.update(existing.windowId, { focused: true });
+    }
+    return;
+  }
+  await chrome.tabs.create({ url: target });
+}
 
 /**
  * @returns {Promise<GossipSettings>}
@@ -52,7 +76,7 @@ async function fetchGossip(repo) {
   const settings = await loadSettings();
   const base = String(settings.apiBaseUrl || "").replace(/\/$/, "");
   if (!base) {
-    throw new Error("请先在扩展选项里填写 API Base URL");
+    throw new Error("请先在扩展设置里填写 API Base URL");
   }
   try {
     const u = new URL(base);

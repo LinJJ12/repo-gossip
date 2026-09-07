@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="zh-CN" class="popup-root">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>repo/gossip</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@400;600;700&family=Syne:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body class="popup-shell">
+    <div class="page">
+      <div class="grain" aria-hidden="true"></div>
+      <div class="glow glow-a" aria-hidden="true"></div>
+      <div class="glow glow-b" aria-hidden="true"></div>
+
+      <div class="topbar">
+        <button type="button" class="topbar-btn" id="open-full">完整页面</button>
+        <button type="button" class="topbar-btn" id="nav-settings" hidden>
+          设置
+        </button>
+        <button type="button" class="topbar-btn" id="nav-compose" hidden>
+          返回出报
+        </button>
+      </div>
+
+      <section id="view-compose" class="view">
+        <header class="hero">
+          <p class="masthead">夜班编辑室出品</p>
+          <h1 class="brand">
+            repo<span class="brand-slash">/</span>gossip
+          </h1>
+          <p class="tagline">
+            丢进仓库链接，拿走一份项目八卦小报。
+          </p>
+
+          <div id="config-banner" class="config-banner" hidden>
+            尚未配置 API Base URL ·
+            <a href="#settings">去设置</a>
+          </div>
+
+          <form class="compose" id="compose-form">
+            <label class="sr-only" for="repo">GitHub 仓库</label>
+            <input
+              id="repo"
+              class="repo-input"
+              placeholder="owner/repo 或 GitHub URL"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <div class="compose-row">
+              <label class="days" for="compose-days">
+                回溯
+                <select id="compose-days">
+                  <option value="3">3 天</option>
+                  <option value="7">7 天</option>
+                  <option value="14" selected>14 天</option>
+                  <option value="30">30 天</option>
+                  <option value="90">90 天</option>
+                </select>
+              </label>
+              <label class="days llm-toggle" for="compose-llm">
+                <input id="compose-llm" type="checkbox" checked />
+                调用 LLM
+              </label>
+              <button class="go" id="go" type="submit">出报</button>
+            </div>
+          </form>
+
+          <div class="examples">
+            <button type="button" class="chip" data-repo="sindresorhus/is">
+              sindresorhus/is
+            </button>
+            <button type="button" class="chip" data-repo="facebook/react">
+              facebook/react
+            </button>
+          </div>
+
+          <p id="compose-error" class="error" hidden></p>
+        </header>
+
+        <main class="stage" id="stage"></main>
+      </section>
+
+      <section id="view-settings" class="view" hidden>
+        <div class="settings-shell">
+          <p class="masthead">夜班编辑室 · 本机配置</p>
+          <h1 class="brand">repo<span class="brand-slash">/</span>gossip</h1>
+          <p class="lede">
+            密钥只存在本机 <code>chrome.storage.local</code>，出报时以 BYOK
+            头发给你的 API，不落服务端库。
+          </p>
+
+          <form id="settings-form">
+            <fieldset>
+              <legend>连接</legend>
+              <div class="field">
+                <label for="apiBaseUrl">API Base URL</label>
+                <input
+                  id="apiBaseUrl"
+                  type="url"
+                  required
+                  placeholder="http://localhost:5173"
+                />
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>BYOK（可选）</legend>
+              <div class="field">
+                <label for="githubToken"
+                  >GitHub Token <span class="hint">提高限额 / 私有仓</span></label
+                >
+                <input id="githubToken" type="password" autocomplete="off" />
+              </div>
+              <div class="field">
+                <label for="llmApiKey">LLM API Key</label>
+                <input id="llmApiKey" type="password" autocomplete="off" />
+              </div>
+              <div class="field">
+                <label for="llmBaseUrl">LLM Base URL</label>
+                <input
+                  id="llmBaseUrl"
+                  type="url"
+                  placeholder="https://api.openai.com/v1"
+                />
+              </div>
+              <div class="field">
+                <label for="llmModel">LLM Model</label>
+                <input id="llmModel" type="text" placeholder="gpt-4o-mini" />
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>出报默认</legend>
+              <div class="split">
+                <div class="field">
+                  <label for="days">回溯天数</label>
+                  <select id="days">
+                    <option value="3">3 天</option>
+                    <option value="7">7 天</option>
+                    <option value="14" selected>14 天</option>
+                    <option value="30">30 天</option>
+                    <option value="90">90 天</option>
+                  </select>
+                </div>
+                <label class="check" for="offline">
+                  <input id="offline" type="checkbox" />
+                  <span
+                    >仅本地模板<br /><span class="hint">不调用 LLM</span></span
+                  >
+                </label>
+              </div>
+            </fieldset>
+
+            <div class="actions">
+              <button id="save" type="submit">保存设置</button>
+              <span id="settings-status" hidden>已写入本机</span>
+            </div>
+          </form>
+        </div>
+      </section>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
