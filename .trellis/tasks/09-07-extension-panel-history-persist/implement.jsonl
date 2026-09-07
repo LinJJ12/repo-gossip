@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "复用现有 showPanel/linkify 与 GOSSIP_FETCH，避免第二套渲染"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "content script 与 storage/background 边界"}
+{"file": ".trellis/spec/web/frontend/quality-guidelines.md", "reason": "侧边栏 UI 保持克制、非 dashboard"}

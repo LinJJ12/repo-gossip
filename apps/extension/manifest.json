@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "repo-gossip",
-  "version": "0.2.8",
+  "version": "0.2.13",
   "description": "粘贴 GitHub 仓库地址生成「项目八卦小报」。开源 sideload，可自填 API 与 BYOK。",
   "permissions": ["storage", "tabs"],
   "host_permissions": [
@@ -25,7 +25,7 @@
   "content_scripts": [
     {
       "matches": ["https://github.com/*/*"],
-      "js": ["content.js"],
+      "js": ["history-logic.js", "content.js"],
       "css": ["content.css"],
       "run_at": "document_idle"
     }

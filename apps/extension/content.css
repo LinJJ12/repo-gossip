@@ -53,12 +53,40 @@
   display: none;
 }
 
+.repo-gossip-panel.is-hidden {
+  display: none;
+}
+
 .repo-gossip-panel__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
   border-bottom: 1px solid #30363d;
+}
+
+.repo-gossip-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.repo-gossip-panel__recent {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #8b949e;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 20px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.repo-gossip-panel__recent:hover {
+  color: #e7ecf1;
+  background: #21262d;
 }
 
 .repo-gossip-panel__close {
@@ -73,12 +101,227 @@
 
 .repo-gossip-panel__body {
   padding: 12px;
+  font-family: "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
 }
 
 .repo-gossip-panel__body h2 {
   margin: 0 0 8px;
   font-size: 16px;
   line-height: 1.35;
+}
+
+.repo-gossip-banner {
+  margin: 0 0 10px;
+  padding: 6px 8px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #8b949e;
+  background: #161b22;
+}
+
+.repo-gossip-banner.is-warn {
+  color: #e3b341;
+  border-color: #3d2e00;
+  background: #211e0f;
+}
+
+.rg-tabloid {
+  --rg-accent: #1de2c5;
+  --rg-muted: #8b949e;
+  --rg-line: #30363d;
+  --rg-coral: #ff4d6d;
+  --rg-lime: #b8e03a;
+  position: relative;
+  margin: 0 0 4px;
+  padding: 0;
+  color: #e7ecf1;
+}
+
+.rg-temp-blazing {
+  --rg-accent: #ff4d6d;
+}
+.rg-temp-warm {
+  --rg-accent: #ffb020;
+}
+.rg-temp-cool {
+  --rg-accent: #1de2c5;
+}
+.rg-temp-frozen {
+  --rg-accent: #7eb6ff;
+}
+
+.rg-stamp {
+  display: inline-block;
+  margin: 0 0 10px;
+  padding: 2px 8px;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--rg-accent);
+  border: 1px solid currentColor;
+  border-radius: 4px;
+}
+
+.rg-head {
+  margin-bottom: 4px;
+}
+
+.rg-issue {
+  margin: 0 0 6px;
+  font-size: 11px;
+  color: var(--rg-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.rg-epic {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.rg-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--rg-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.rg-desc {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--rg-muted);
+}
+
+.rg-block {
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--rg-line);
+  margin-top: 10px;
+}
+
+.rg-block h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rg-accent);
+}
+
+.rg-lead {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.rg-award-list,
+.rg-trans-list,
+.rg-eggs ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.rg-award-list li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+.rg-award-emoji {
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.rg-award-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.rg-award-reason {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--rg-muted);
+  line-height: 1.45;
+}
+
+.rg-trans-list code {
+  display: block;
+  margin-bottom: 4px;
+  padding: 4px 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--rg-lime);
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 4px;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.rg-trans-list p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.rg-arrow {
+  color: var(--rg-coral);
+  margin-right: 2px;
+}
+
+.rg-trans-list cite {
+  color: var(--rg-muted);
+  font-style: normal;
+  font-size: 12px;
+}
+
+.rg-eggs li {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.rg-author-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rg-author-row span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--rg-line);
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+.rg-author-row em {
+  font-style: normal;
+  color: var(--rg-lime);
+}
+
+.rg-closing {
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--rg-line);
+  font-size: 13px;
+  color: var(--rg-muted);
+  line-height: 1.5;
 }
 
 .repo-gossip-pre {
@@ -108,4 +351,66 @@
 
 .repo-gossip-link:hover {
   color: #79b8ff;
+}
+
+.repo-gossip-history {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.repo-gossip-history-item {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid #30363d;
+  background: #161b22;
+  color: inherit;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.repo-gossip-history-item:hover {
+  border-color: #484f58;
+  background: #1c2128;
+}
+
+.repo-gossip-history-item__repo {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e7ecf1;
+}
+
+.repo-gossip-history-item__title {
+  font-size: 12px;
+  color: #c9d1d9;
+  line-height: 1.35;
+}
+
+.repo-gossip-history-item__time {
+  font-size: 11px;
+  color: #8b949e;
+}
+
+.repo-gossip-refetch {
+  appearance: none;
+  display: inline-block;
+  margin-top: 12px;
+  border: 1px solid #30363d;
+  background: #21262d;
+  color: #e7ecf1;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.repo-gossip-refetch:hover {
+  background: #30363d;
 }

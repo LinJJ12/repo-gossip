@@ -23,6 +23,7 @@ These guides help you **ask the right questions before coding**.
 |-------|---------|-------------|
 | [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md) | Identify patterns and reduce duplication | When you notice repeated patterns |
 | [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Think through data flow across layers | Features spanning multiple layers |
+| [Extension Content Panel](./extension-panel.md) | GitHub sidebar panel history, hide/restore, storage | Changing `apps/extension/content.js` / history |
 
 ---
 
@@ -50,6 +51,14 @@ These guides help you **ask the right questions before coding**.
 - [ ] Multiple branches update the same derived state from `kind` / `action`
 
 → Read [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md)
+
+### When to Think About Extension Panel
+
+- [ ] Changing GitHub content-script panel close / history / cache behavior
+- [ ] Writing to `chrome.storage.local` for gossip history
+- [ ] Rendering tabloid HTML inside the sidebar (vs extension app page)
+
+→ Read [Extension Content Panel](./extension-panel.md)
 
 ### When Verifying AI Cross-Review Results
 
