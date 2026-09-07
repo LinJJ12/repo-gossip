@@ -58,3 +58,14 @@ export {
   resetGossipCache,
 } from "./gossip-cache.js";
 export type { GossipCacheEntry } from "./gossip-cache.js";
+
+export {
+  isGithubLogin,
+  isGithubFullName,
+  githubUserUrl,
+  githubRepoUrl,
+  splitGithubLinkParts,
+  linkifyGithubHtml,
+  normalizeGithubLogins,
+} from "./github-links.js";
+export type { LinkifyPart, LinkifyOpts, LinkifyHtmlOpts } from "./github-links.js";

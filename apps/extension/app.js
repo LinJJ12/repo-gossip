@@ -73,6 +73,138 @@
       .replace(/"/g, "&quot;");
   }
 
+  /** @param {string} name */
+  function isGithubLogin(name) {
+    return /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/.test(name);
+  }
+
+  /** @param {string} name */
+  function isGithubFullName(name) {
+    const parts = String(name).split("/");
+    if (parts.length !== 2) return false;
+    return parts.every(
+      (p) =>
+        p.length > 0 &&
+        p.length <= 100 &&
+        /^[A-Za-z0-9._-]+$/.test(p) &&
+        !p.startsWith(".") &&
+        !p.endsWith("."),
+    );
+  }
+
+  /** @param {string} s */
+  function escapeRegExp(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  /** @param {string} token */
+  function tokenRegExp(token) {
+    return new RegExp(`(^|[^A-Za-z0-9])(${escapeRegExp(token)})(?![A-Za-z0-9])`, "g");
+  }
+
+  /** @param {string} login */
+  function userHref(login) {
+    return `https://github.com/${encodeURIComponent(login)}`;
+  }
+
+  /** @param {string} fullName */
+  function repoHref(fullName) {
+    const [owner, repo] = fullName.split("/");
+    return `https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+  }
+
+  /** @param {string} login */
+  function userLink(login) {
+    const safe = escapeHtml(login);
+    return `<a class="gh-link" href="${userHref(login)}" target="_blank" rel="noopener noreferrer">${safe}</a>`;
+  }
+
+  /** @param {string} fullName */
+  function repoLink(fullName) {
+    const safe = escapeHtml(fullName);
+    return `<a class="gh-link" href="${repoHref(fullName)}" target="_blank" rel="noopener noreferrer">${safe}</a>`;
+  }
+
+  /**
+   * @param {any} analyzed
+   * @param {any[]} translations
+   * @returns {string[]}
+   */
+  function collectLogins(analyzed, translations) {
+    /** @type {Set<string>} */
+    const set = new Set();
+    for (const a of analyzed?.awards || []) {
+      if (a?.winner) set.add(String(a.winner));
+    }
+    for (const a of analyzed?.topAuthors || []) {
+      if (a?.name) set.add(String(a.name));
+    }
+    for (const c of analyzed?.snapshot?.commits || []) {
+      if (c?.authorLogin) set.add(String(c.authorLogin));
+      else if (c?.author) set.add(String(c.author));
+    }
+    for (const e of analyzed?.easterEggs || []) {
+      if (e?.author) set.add(String(e.author));
+    }
+    for (const t of translations || []) {
+      if (t?.author) set.add(String(t.author));
+    }
+    return [...set].filter(isGithubLogin).sort((a, b) => b.length - a.length);
+  }
+
+  /**
+   * Mirror of packages/core github-links: placeholder claim order avoids nested <a>.
+   * @param {string} text
+   * @param {{ fullName?: string, logins?: string[], className?: string, minProseLoginLength?: number }} opts
+   */
+  function linkifyGithubHtml(text, opts = {}) {
+    const className = opts.className || "gh-link";
+    const minLen = opts.minProseLoginLength ?? 2;
+    /** @type {{ kind: "repo" | "user", value: string }[]} */
+    const slots = [];
+    const mark = (/** @type {"repo" | "user"} */ kind, value) => {
+      const id = slots.length;
+      slots.push({ kind, value });
+      return `\uE000${id}\uE001`;
+    };
+
+    let work = String(text);
+    const fullName =
+      opts.fullName && isGithubFullName(opts.fullName) ? opts.fullName : undefined;
+    if (fullName) {
+      work = work.replace(tokenRegExp(fullName), (_m, pre) => `${pre}${mark("repo", fullName)}`);
+    }
+
+    const logins = [...new Set(opts.logins || [])]
+      .filter(isGithubLogin)
+      .filter((l) => l.length >= minLen)
+      .filter((l) => l !== fullName)
+      .sort((a, b) => b.length - a.length);
+
+    for (const login of logins) {
+      work = work.replace(tokenRegExp(login), (_m, pre) => `${pre}${mark("user", login)}`);
+    }
+
+    const escaped = escapeHtml(work);
+    return escaped.replace(/\uE000(\d+)\uE001/g, (_m, id) => {
+      const slot = slots[Number(id)];
+      if (!slot) return "";
+      if (slot.kind === "repo") {
+        return `<a class="${className}" href="${repoHref(slot.value)}" target="_blank" rel="noopener noreferrer">${escapeHtml(slot.value)}</a>`;
+      }
+      return `<a class="${className}" href="${userHref(slot.value)}" target="_blank" rel="noopener noreferrer">${escapeHtml(slot.value)}</a>`;
+    });
+  }
+
+  /**
+   * @param {string} text
+   * @param {string[]} logins
+   * @param {string} [fullName]
+   */
+  function linkifyLoginsHtml(text, logins, fullName) {
+    return linkifyGithubHtml(text, { fullName, logins, className: "gh-link" });
+  }
+
   async function loadStorage() {
     return chrome.storage.local.get(DEFAULTS);
   }
@@ -219,13 +351,21 @@
       ? tabloid.awardsNarrative
       : [];
     const awards = Array.isArray(analyzed.awards) ? analyzed.awards : [];
+    const translations = Array.isArray(tabloid.translations)
+      ? tabloid.translations.filter(
+          (t) => String(t.original || "").trim() || String(t.drama || "").trim(),
+        )
+      : [];
+    const logins = collectLogins(analyzed, tabloid.translations || []);
+    const fullName = String(snap.fullName || "");
+
     let awardsHtml = "";
     if (awardsNarrative.length || awards.length) {
       const items = awardsNarrative.length
         ? awardsNarrative
             .map(
               (line) =>
-                `<li><div><p class="award-title">${escapeHtml(String(line))}</p></div></li>`,
+                `<li><div><p class="award-title">${linkifyLoginsHtml(String(line), logins, fullName)}</p></div></li>`,
             )
             .join("")
         : awards
@@ -234,7 +374,11 @@
             <li>
               <span class="award-emoji">${escapeHtml(a.emoji || "")}</span>
               <div>
-                <p class="award-title">「${escapeHtml(a.title || "")}」——${escapeHtml(a.winner || "")}</p>
+                <p class="award-title">「${escapeHtml(a.title || "")}」——${
+                  a.winner && isGithubLogin(String(a.winner))
+                    ? userLink(String(a.winner))
+                    : escapeHtml(a.winner || "")
+                }</p>
                 <p class="award-reason">${escapeHtml(a.reason || "")}</p>
               </div>
             </li>`,
@@ -243,11 +387,6 @@
       awardsHtml = `<section class="block"><h3>颁奖典礼</h3><ul class="award-list">${items}</ul></section>`;
     }
 
-    const translations = Array.isArray(tabloid.translations)
-      ? tabloid.translations.filter(
-          (t) => String(t.original || "").trim() || String(t.drama || "").trim(),
-        )
-      : [];
     let transHtml = "";
     if (translations.length) {
       const items = translations
@@ -255,9 +394,12 @@
           const code = t.original
             ? `<code>${escapeHtml(String(t.original))}</code>`
             : "";
-          const author = t.author
-            ? `<cite> ——${escapeHtml(String(t.author))}</cite>`
-            : "";
+          const author =
+            t.author && isGithubLogin(String(t.author))
+              ? `<cite> ——${userLink(String(t.author))}</cite>`
+              : t.author
+                ? `<cite> ——${escapeHtml(String(t.author))}</cite>`
+                : "";
           return `<li>${code}<p><span class="arrow">→</span> ${escapeHtml(String(t.drama || "（暂无翻译）"))}${author}</p></li>`;
         })
         .join("");
@@ -269,7 +411,7 @@
       : [];
     const eggsHtml = eggs.length
       ? `<section class="block eggs"><h3>彩蛋侦探</h3><ul>${eggs
-          .map((line) => `<li>${escapeHtml(String(line))}</li>`)
+          .map((line) => `<li>${linkifyLoginsHtml(String(line), logins, fullName)}</li>`)
           .join("")}</ul></section>`
       : "";
 
@@ -278,23 +420,29 @@
       : [];
     const authorsHtml = authors.length
       ? `<section class="block authors"><h3>出镜名单</h3><div class="author-row">${authors
-          .map(
-            (a) =>
-              `<span>${escapeHtml(a.name || "")}<em>${escapeHtml(String(a.commits ?? ""))}</em></span>`,
-          )
+          .map((a) => {
+            const name = String(a.name || "");
+            const label = isGithubLogin(name)
+              ? userLink(name)
+              : escapeHtml(name);
+            return `<span>${label}<em>${escapeHtml(String(a.commits ?? ""))}</em></span>`;
+          })
           .join("")}</div></section>`
       : "";
 
     const stars =
       typeof snap.stars === "number" ? snap.stars.toLocaleString() : "—";
     const commitCount = Array.isArray(snap.commits) ? snap.commits.length : 0;
+    const fullNameHtml = isGithubFullName(fullName)
+      ? repoLink(fullName)
+      : escapeHtml(fullName);
 
     stage.innerHTML = `
       ${banners.join("")}
       <article class="tabloid temp-${escapeHtml(level)}">
         <div class="tabloid-stamp">${escapeHtml(temp.emoji || "")} ${escapeHtml(temp.label || "")}</div>
         <header class="tabloid-head">
-          <p class="issue">项目八卦小报 · ${escapeHtml(snap.fullName || "")}</p>
+          <p class="issue">项目八卦小报 · ${fullNameHtml}</p>
           <h2 class="epic">${escapeHtml(tabloid.epicTitle || "八卦小报")}</h2>
           <p class="meta">
             <span>★ ${escapeHtml(stars)}</span>

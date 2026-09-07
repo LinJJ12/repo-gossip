@@ -19,7 +19,10 @@ export type TabloidPayload = {
         stars: number;
         language: string | null;
         description: string | null;
-        commits: unknown[];
+        commits: {
+          author: string;
+          authorLogin?: string;
+        }[];
       };
       temperature: {
         level: TemperatureLevel;

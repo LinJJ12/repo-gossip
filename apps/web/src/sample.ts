@@ -42,7 +42,7 @@ export const SAMPLE_TABLOID: TabloidPayload = {
         stars: 1337,
         language: "TypeScript",
         description: "示例仓库：支付结账服务（样报数据，非真实拉取）",
-        commits: new Array(28).fill(null),
+        commits: Array.from({ length: 28 }, () => ({ author: "zhangsan" })),
       },
       temperature: {
         level: "blazing",

@@ -406,6 +406,16 @@ select {
   color: var(--muted);
 }
 
+.gh-link {
+  color: var(--teal);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.gh-link:hover {
+  color: var(--lime);
+}
+
 .epic {
   margin: 0;
   font-family: var(--font-display);

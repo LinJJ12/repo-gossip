@@ -291,7 +291,7 @@
     showPanel(`
       <h2>${escapeHtml(title)}</h2>
       ${meta ? `<p class="repo-gossip-muted">${meta}</p>` : ""}
-      <pre class="repo-gossip-pre">${escapeHtml(plain)}</pre>
+      <pre class="repo-gossip-pre">${linkifyPlainHtml(plain, data)}</pre>
     `);
   }
 
@@ -301,6 +301,117 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
+  }
+
+  /** @param {string} name */
+  function isGithubLogin(name) {
+    return /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/.test(name);
+  }
+
+  /** @param {string} name */
+  function isGithubFullName(name) {
+    const parts = String(name).split("/");
+    if (parts.length !== 2) return false;
+    return parts.every(
+      (p) =>
+        p.length > 0 &&
+        p.length <= 100 &&
+        /^[A-Za-z0-9._-]+$/.test(p) &&
+        !p.startsWith(".") &&
+        !p.endsWith("."),
+    );
+  }
+
+  /** @param {string} s */
+  function escapeRegExp(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  /** @param {string} token */
+  function tokenRegExp(token) {
+    return new RegExp(`(^|[^A-Za-z0-9])(${escapeRegExp(token)})(?![A-Za-z0-9])`, "g");
+  }
+
+  /** @param {string} login */
+  function userHref(login) {
+    return `https://github.com/${encodeURIComponent(login)}`;
+  }
+
+  /** @param {string} fullName */
+  function repoHref(fullName) {
+    const [owner, repo] = fullName.split("/");
+    return `https://github.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+  }
+
+  /**
+   * @param {any} data
+   * @returns {string[]}
+   */
+  function collectLogins(data) {
+    /** @type {Set<string>} */
+    const set = new Set();
+    const analyzed = data?.tabloid?.analyzed;
+    if (!analyzed) return [];
+    for (const a of analyzed.awards || []) {
+      if (a?.winner) set.add(String(a.winner));
+    }
+    for (const a of analyzed.topAuthors || []) {
+      if (a?.name) set.add(String(a.name));
+    }
+    for (const c of analyzed.snapshot?.commits || []) {
+      if (c?.authorLogin) set.add(String(c.authorLogin));
+      else if (c?.author) set.add(String(c.author));
+    }
+    for (const e of analyzed.easterEggs || []) {
+      if (e?.author) set.add(String(e.author));
+    }
+    for (const t of data?.tabloid?.translations || []) {
+      if (t?.author) set.add(String(t.author));
+    }
+    return [...set].filter(isGithubLogin).sort((a, b) => b.length - a.length);
+  }
+
+  /**
+   * @param {string} plain
+   * @param {any} data
+   */
+  function linkifyPlainHtml(plain, data) {
+    const fullName = data?.tabloid?.analyzed?.snapshot?.fullName;
+    const className = "repo-gossip-link";
+    const minLen = 2;
+    /** @type {{ kind: "repo" | "user", value: string }[]} */
+    const slots = [];
+    const mark = (/** @type {"repo" | "user"} */ kind, value) => {
+      const id = slots.length;
+      slots.push({ kind, value });
+      return `\uE000${id}\uE001`;
+    };
+
+    let work = String(plain);
+    const repo =
+      typeof fullName === "string" && isGithubFullName(fullName)
+        ? fullName
+        : undefined;
+    if (repo) {
+      work = work.replace(tokenRegExp(repo), (_m, pre) => `${pre}${mark("repo", repo)}`);
+    }
+
+    const logins = collectLogins(data)
+      .filter((l) => l.length >= minLen)
+      .filter((l) => l !== repo);
+
+    for (const login of logins) {
+      work = work.replace(tokenRegExp(login), (_m, pre) => `${pre}${mark("user", login)}`);
+    }
+
+    return escapeHtml(work).replace(/\uE000(\d+)\uE001/g, (_m, id) => {
+      const slot = slots[Number(id)];
+      if (!slot) return "";
+      if (slot.kind === "repo") {
+        return `<a class="${className}" href="${repoHref(slot.value)}" target="_blank" rel="noopener noreferrer">${escapeHtml(slot.value)}</a>`;
+      }
+      return `<a class="${className}" href="${userHref(slot.value)}" target="_blank" rel="noopener noreferrer">${escapeHtml(slot.value)}</a>`;
+    });
   }
 
   const mo = new MutationObserver(() => scheduleEnsure());

@@ -136,6 +136,10 @@ export default defineConfig({
   plugins: [react(), gossipApiPlugin()],
   resolve: {
     alias: {
+      "@repo-gossip/core/github-links": path.resolve(
+        repoRoot,
+        "packages/core/src/github-links.ts",
+      ),
       "@repo-gossip/core": path.resolve(repoRoot, "packages/core/src/index.ts"),
     },
   },
