@@ -14,7 +14,7 @@
     "web": "npm run dev -w @repo-gossip/web",
     "web:build": "npm run build -w @repo-gossip/web",
     "typecheck": "npm run typecheck -w @repo-gossip/core && npm run typecheck -w @repo-gossip/bot && npm run typecheck -w @repo-gossip/web",
-    "test": "tsx --test test/**/*.test.ts",
+    "test": "tsx --test test/*.test.ts",
     "build": "npm run build -w @repo-gossip/core"
   },
   "keywords": [

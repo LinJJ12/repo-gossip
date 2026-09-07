@@ -88,20 +88,17 @@ async function fetchGossip(repo) {
     throw new Error("API Base URL 无效");
   }
 
+  const githubToken = String(settings.githubToken ?? "").trim();
+  const llmApiKey = String(settings.llmApiKey ?? "").trim();
+  const llmBaseUrl = String(settings.llmBaseUrl ?? "").trim();
+  const llmModel = String(settings.llmModel ?? "").trim();
+
   /** @type {Record<string, string>} */
   const headers = { "content-type": "application/json" };
-  if (settings.githubToken.trim()) {
-    headers["x-github-token"] = settings.githubToken.trim();
-  }
-  if (settings.llmApiKey.trim()) {
-    headers["x-llm-api-key"] = settings.llmApiKey.trim();
-  }
-  if (settings.llmBaseUrl.trim()) {
-    headers["x-llm-base-url"] = settings.llmBaseUrl.trim();
-  }
-  if (settings.llmModel.trim()) {
-    headers["x-llm-model"] = settings.llmModel.trim();
-  }
+  if (githubToken) headers["x-github-token"] = githubToken;
+  if (llmApiKey) headers["x-llm-api-key"] = llmApiKey;
+  if (llmBaseUrl) headers["x-llm-base-url"] = llmBaseUrl;
+  if (llmModel) headers["x-llm-model"] = llmModel;
 
   const days = Math.min(90, Math.max(1, Number(settings.days) || 14));
 
