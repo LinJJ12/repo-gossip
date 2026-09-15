@@ -6,10 +6,21 @@ export function formatTabloid(tabloid: Tabloid): PlatformMessage {
   const stars = analyzed.snapshot.stars;
   const lang = analyzed.snapshot.language ?? "unknown";
 
+  const pulls = analyzed.snapshot.pulls?.length ?? 0;
+  const issues = analyzed.snapshot.issues?.length ?? 0;
+  const releases = analyzed.snapshot.releases?.length ?? 0;
+  const commitCount = analyzed.snapshot.commits?.length ?? 0;
+  const activityBits: string[] = [];
+  if (pulls > 0) activityBits.push(`${pulls} PRs`);
+  if (issues > 0) activityBits.push(`${issues} issues`);
+  if (releases > 0) activityBits.push(`${releases} releases`);
+
   const lines: string[] = [];
   lines.push(`\uD83D\uDCF0 **\u9879\u76ee\u516b\u5366\u5c0f\u62a5 \u00b7 ${repo}**`);
   lines.push(
-    `\u2B50 ${stars} \u00b7 ${lang} \u00b7 ${analyzed.snapshot.commits.length} commits`,
+    `\u2B50 ${stars} \u00b7 ${lang} \u00b7 ${commitCount} commits${
+      activityBits.length ? ` \u00b7 ${activityBits.join(" \u00b7 ")}` : ""
+    }`,
   );
   lines.push("");
   lines.push(`\uD83C\uDFAC **\u672c\u5468\u5927\u7247**`);

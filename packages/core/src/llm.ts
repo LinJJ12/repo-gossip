@@ -37,11 +37,20 @@ export async function generateTabloid(
 }
 
 const SYSTEM_PROMPT =
-  "You are a Chinese tabloid editor for GitHub repos. Be funny and epic, never insult people. Output ONE JSON object only. Use EXACTLY these English keys: epicTitle, awardsNarrative, temperatureLine, translations, easterEggLines, closing. Each translations item MUST be {\"original\":\"commit message\",\"drama\":\"Chinese rewrite\",\"author\":\"name\"}. Never leave drama empty. All human-readable string values must be Chinese.";
+  "You are a Chinese tabloid editor for GitHub repos. Be funny and epic, never insult people. Output ONE JSON object only. Use EXACTLY these English keys: epicTitle, awardsNarrative, temperatureLine, translations, easterEggLines, closing. Facts may include recent PRs, issues, and releases — weave them into awardsNarrative, temperatureLine, closing, or easterEggLines when present (cite #N or release tags). translations stay commit-message oriented: each item MUST be {\"original\":\"commit message\",\"drama\":\"Chinese rewrite\",\"author\":\"name\"}. Never leave drama empty. All human-readable string values must be Chinese.";
 
 function buildFactSheet(a: AnalyzedGossip): string {
-  const { snapshot: s, temperature: t, awards, easterEggs, topAuthors, notableCommits } =
-    a;
+  const {
+    snapshot: s,
+    temperature: t,
+    awards,
+    easterEggs,
+    topAuthors,
+    notableCommits,
+    notablePulls,
+    hotIssues,
+    latestRelease,
+  } = a;
 
   return JSON.stringify(
     {
@@ -50,6 +59,9 @@ function buildFactSheet(a: AnalyzedGossip): string {
       language: s.language,
       stars: s.stars,
       commitCount: s.commits.length,
+      pullCount: s.pulls?.length ?? 0,
+      issueCount: s.issues?.length ?? 0,
+      releaseCount: s.releases?.length ?? 0,
       temperature: {
         label: `${t.emoji} ${t.label}`,
         commitsLast3Days: t.commitsLast3Days,
@@ -73,6 +85,29 @@ function buildFactSheet(a: AnalyzedGossip): string {
         additions: c.additions,
         deletions: c.deletions,
       })),
+      notablePulls: (notablePulls ?? []).map((p) => ({
+        number: p.number,
+        title: p.title,
+        author: p.author,
+        state: p.state,
+        merged: p.merged,
+      })),
+      hotIssues: (hotIssues ?? []).map((i) => ({
+        number: i.number,
+        title: i.title,
+        author: i.author,
+        state: i.state,
+        labels: i.labels,
+      })),
+      latestRelease: latestRelease
+        ? {
+            tag: latestRelease.tag,
+            name: latestRelease.name,
+            author: latestRelease.author,
+            publishedAt: latestRelease.publishedAt,
+            prerelease: latestRelease.prerelease,
+          }
+        : null,
     },
     null,
     2,
@@ -226,31 +261,68 @@ function pickStr(obj: Record<string, unknown>, keys: string[]): string {
 }
 
 function fallbackTabloid(analyzed: AnalyzedGossip): Tabloid {
-  const offline = {
+  const activityBits = activityClues(analyzed);
+  const eggLines = analyzed.easterEggs.map(
+    (e) =>
+      `${e.emoji} ${e.tag}\u2014\u2014${e.author} @ ${e.sha}: \u300c${e.evidence}\u300d`,
+  );
+  for (const clue of activityBits) {
+    if (eggLines.length >= 5) break;
+    eggLines.push(clue);
+  }
+
+  return {
     epicTitle: fallbackTitle(analyzed),
     awardsNarrative: analyzed.awards.map(
       (a) =>
         `${a.emoji}\u300c${a.title}\u300d\u2014\u2014${a.winner} (${a.reason})`,
     ),
-    temperatureLine: `${analyzed.temperature.emoji}\u300c${analyzed.temperature.label}\u300d`,
+    temperatureLine: `${analyzed.temperature.emoji}\u300c${analyzed.temperature.label}\u300d${
+      activityBits[0] ? `\u2014\u2014${activityBits[0]}` : ""
+    }`,
     translations: analyzed.notableCommits.slice(0, 5).map((c) => ({
       original: c.message,
       drama: dramatizeLocally(c.message),
       author: c.author,
     })),
-    easterEggLines: analyzed.easterEggs.map(
-      (e) =>
-        `${e.emoji} ${e.tag}\u2014\u2014${e.author} @ ${e.sha}: \u300c${e.evidence}\u300d`,
-    ),
+    easterEggLines: eggLines,
     closing:
-      "\uff08LLM unavailable; local templates\uff09",
+      activityBits.length > 0
+        ? `\uff08LLM unavailable; local templates\uff09 \u4ecd\u6709\u52a8\u6001\u7d20\u6750\uff1a${activityBits.slice(0, 2).join("\uff1b")}`
+        : "\uff08LLM unavailable; local templates\uff09",
     analyzed,
   };
-  return offline;
+}
+
+function activityClues(a: AnalyzedGossip): string[] {
+  const clues: string[] = [];
+  for (const p of (a.notablePulls ?? []).slice(0, 2)) {
+    clues.push(
+      `PR #${p.number} \u300c${truncateClue(p.title)}\u300d${p.merged ? " merged" : ""}`,
+    );
+  }
+  for (const i of (a.hotIssues ?? []).slice(0, 2)) {
+    clues.push(`Issue #${i.number} \u300c${truncateClue(i.title)}\u300d`);
+  }
+  if (a.latestRelease?.tag) {
+    clues.push(
+      `\u53d1\u7248 ${a.latestRelease.tag}${a.latestRelease.name && a.latestRelease.name !== a.latestRelease.tag ? ` \u300c${truncateClue(a.latestRelease.name)}\u300d` : ""}`,
+    );
+  }
+  return clues;
+}
+
+function truncateClue(s: string, n = 48): string {
+  const t = s.replace(/[\r\n\t]+/g, " ").replace(/ +/g, " ").trim();
+  return t.length <= n ? t : `${t.slice(0, n - 1)}\u2026`;
 }
 
 function fallbackTitle(a: AnalyzedGossip): string {
   const name = a.snapshot.ref.repo;
+  const release = a.latestRelease;
+  if (release?.tag && a.temperature.level !== "frozen") {
+    return `\u300a${name}\uff1a${release.tag} \u4e0a\u7ebf\u591c\u300b`;
+  }
   switch (a.temperature.level) {
     case "blazing":
       return `\u300a${name}\uff1a\u8fde\u7eed\u52a0\u73ed\u7684\u4e03\u4e2a\u65e5\u591c\u300b`;

@@ -7,6 +7,7 @@
 | Unparseable repo string | **Throw** `Error` with usage hint | `parseRepoRef` |
 | GitHub 403/429 rate limit | **Retry** then **Throw** enriched message (`GITHUB_TOKEN` hint) | `github-retry.ts` / `withGithubRetry` |
 | GitHub commit detail fetch fails | **Degrade**: list payload + `statsIncomplete` → `warnings` | `github.ts` / `gossip.ts` |
+| GitHub PR/Issue/Release list fails | **Degrade**: empty arrays + `activityIncomplete` → `warnings` | `github.ts` / `gossip.ts` |
 | Missing LLM key / `--offline` | **Degrade**: offline tabloid, optional `llmError` | `gossip.ts` |
 | LLM HTTP/parse failure | **Degrade**: `fallbackTabloid`, `mode: "fallback"`, log + `llmError` | `llm.ts` `generateTabloid` |
 | BYOK `x-llm-base-url` metadata/SSRF | **Drop** header (`isAllowedLlmBaseUrl`) | `byok.ts` |

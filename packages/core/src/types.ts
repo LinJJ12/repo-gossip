@@ -14,6 +14,32 @@ export type CommitStat = {
   files: string[];
 };
 
+export type PullStat = {
+  number: number;
+  title: string;
+  author: string;
+  state: string;
+  merged: boolean;
+  updatedAt: string;
+};
+
+export type IssueStat = {
+  number: number;
+  title: string;
+  author: string;
+  state: string;
+  labels: string[];
+  updatedAt: string;
+};
+
+export type ReleaseStat = {
+  tag: string;
+  name: string;
+  author?: string;
+  publishedAt: string;
+  prerelease: boolean;
+};
+
 export type RepoSnapshot = {
   ref: RepoRef;
   fullName: string;
@@ -22,9 +48,14 @@ export type RepoSnapshot = {
   language: string | null;
   defaultBranch: string;
   commits: CommitStat[];
+  pulls: PullStat[];
+  issues: IssueStat[];
+  releases: ReleaseStat[];
   fetchedAt: string;
   /** True when some commit detail fetches failed (stats may be incomplete). */
   statsIncomplete?: boolean;
+  /** True when any PR/issue/release list fetch failed. */
+  activityIncomplete?: boolean;
 };
 
 export type Temperature = {
@@ -58,6 +89,9 @@ export type AnalyzedGossip = {
   easterEggs: EasterEgg[];
   topAuthors: { name: string; commits: number }[];
   notableCommits: CommitStat[];
+  notablePulls: PullStat[];
+  hotIssues: IssueStat[];
+  latestRelease: ReleaseStat | null;
 };
 
 export type Tabloid = {
