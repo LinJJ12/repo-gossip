@@ -171,6 +171,52 @@ export async function fetchRepoSnapshot(
   };
 }
 
+/**
+ * Drop any issues that are actually pull requests. The GitHub issues API
+ * returns PRs in the same list, and letting one slip through would surface a
+ * "Issue #N" clue that is really a PR.
+ */
+export function filterNonPullIssues<T extends { pull_request?: unknown }>(
+  raw: T[],
+): T[] {
+  return raw.filter((i) => !i.pull_request);
+}
+
+type RawReleaseItem = {
+  tag_name?: string | null;
+  name?: string | null;
+  author?: { login?: string | null } | null;
+  published_at?: string | null;
+  created_at?: string | null;
+  prerelease?: boolean | null;
+};
+
+/**
+ * Map raw releases to `ReleaseStat`, then keep only those inside the since-window
+ * with a non-empty tag, sort by publish time (newest first), and cap at `max`.
+ * Out-of-window releases must be dropped — otherwise a dormant repo's ancient
+ * release would falsely trigger the "发版烟花" (ship-it) award.
+ */
+export function mapReleasesInWindow(
+  raw: RawReleaseItem[],
+  sinceMs: number,
+  max: number,
+): ReleaseStat[] {
+  return raw
+    .map(
+      (r): ReleaseStat => ({
+        tag: oneLine(r.tag_name ?? ""),
+        name: oneLine(r.name || r.tag_name || ""),
+        author: r.author?.login ?? undefined,
+        publishedAt: r.published_at ?? r.created_at ?? new Date().toISOString(),
+        prerelease: Boolean(r.prerelease),
+      }),
+    )
+    .filter((r) => r.tag && timeMs(r.publishedAt) >= sinceMs)
+    .sort((a, b) => timeMs(b.publishedAt) - timeMs(a.publishedAt))
+    .slice(0, max);
+}
+
 async function fetchActivity(
   octokit: Octokit,
   ref: RepoRef,
@@ -235,8 +281,7 @@ async function fetchActivity(
             per_page: Math.min(MAX_ISSUES * 2, 100),
           }),
         );
-        return data
-          .filter((i) => !i.pull_request)
+        return filterNonPullIssues(data)
           .slice(0, MAX_ISSUES)
           .map(
             (i): IssueStat => ({
@@ -268,20 +313,7 @@ async function fetchActivity(
         );
         // Only releases inside the sinceDays window — out-of-window
         // fallbacks falsely trigger ship-it / “上线夜” on dormant repos.
-        return data
-          .map(
-            (r): ReleaseStat => ({
-              tag: oneLine(r.tag_name ?? ""),
-              name: oneLine(r.name || r.tag_name || ""),
-              author: r.author?.login ?? undefined,
-              publishedAt:
-                r.published_at ?? r.created_at ?? new Date().toISOString(),
-              prerelease: Boolean(r.prerelease),
-            }),
-          )
-          .filter((r) => r.tag && timeMs(r.publishedAt) >= sinceMs)
-          .sort((a, b) => timeMs(b.publishedAt) - timeMs(a.publishedAt))
-          .slice(0, MAX_RELEASES);
+      return mapReleasesInWindow(data, sinceMs, MAX_RELEASES);
       } catch {
         activityIncomplete = true;
         return [];

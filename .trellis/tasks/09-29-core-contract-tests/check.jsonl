@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/core/backend/quality-guidelines.md", "reason": "中文与标点回归断言的既有风格"}
+{"file": ".trellis/spec/core/backend/index.md", "reason": "校验新增导出是否合规"}
