@@ -163,6 +163,7 @@ curl -X POST https://<domain>/api/gossip \
 | `GITHUB_TOKEN` | 提高限额 / 读私有仓 |
 | `LLM_API_KEY` · `LLM_BASE_URL` · `LLM_MODEL` | 兼容 OpenAI Chat Completions |
 | `LLM_TIMEOUT_MS` | 单次 LLM 请求超时（毫秒，默认 20000），超时回落本地模板 |
+| `GOSSIP_MAX_COMMIT_DETAILS` | 单次出报拉取提交详情的 commit 上限（默认 20，设 0 退化为纯列表出报） |
 | `GOSSIP_OFFLINE` | `1` 强制本地模板 |
 | `WEBHOOK_SECRET` | 内部调用校验（可选） |
 | `GOSSIP_REQUIRE_WEBHOOK_SECRET` | `1` 时生产强制鉴权 |

@@ -37,7 +37,14 @@ export type {
 
 export { analyzeSnapshot } from "./analyzer.js";
 export { formatTabloid, toDiscordEmbed, toFeishuCard } from "./format.js";
-export { createOctokit, fetchRepoSnapshot } from "./github.js";
+export {
+  createOctokit,
+  fetchRepoSnapshot,
+  messageScoreForDetail,
+  pickCommitsForDetail,
+  resolveDetailBudget,
+  DEFAULT_MAX_COMMIT_DETAILS,
+} from "./github.js";
 export {
   withGithubRetry,
   isGithubRateLimitError,

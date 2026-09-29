@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/core/backend/quality-guidelines.md", "reason": "纯函数可测性、类型与导出规范"}
+{"file": ".trellis/spec/core/backend/error-handling.md", "reason": "校验跳过 vs 失败的语义未被混淆"}

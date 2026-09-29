@@ -14,6 +14,9 @@ const MAX_PULLS = 15;
 const MAX_ISSUES = 15;
 const MAX_RELEASES = 5;
 
+/** Default cap on how many commits get per-detail (stats/files) fetches. */
+export const DEFAULT_MAX_COMMIT_DETAILS = 20;
+
 export function createOctokit(token?: string): Octokit {
   return new Octokit({
     auth: token || undefined,
@@ -21,10 +24,79 @@ export function createOctokit(token?: string): Octokit {
   });
 }
 
+/**
+ * Heuristic pre-fetch score using only list-level info (no network, no LOC).
+ * Higher = more likely to be worth a detail fetch. Mirrors the intuition in
+ * `analyzer.ts`'s `pickNotable` but deliberately avoids LOC, which is exactly
+ * the cost we are trying to skip.
+ */
+export function messageScoreForDetail(c: {
+  message: string;
+  date: string;
+}): number {
+  let score = 0;
+  if (/fix|bug|hotfix|urgent/i.test(c.message)) score += 4;
+  if (c.message.trim().length < 12) score += 3;
+  const hour = new Date(c.date).getUTCHours();
+  if (Number.isFinite(hour) && hour < 5) score += 2;
+  return score;
+}
+
+/**
+ * Pure, deterministic selection of which commit shas to pull details for.
+ * Candidate set = top-12 by `messageScoreForDetail` ∪ most-recent-8 by date,
+ * deduplicated, then returned in the ORIGINAL list order, capped at `budget`.
+ * `--sha` (asc) tie-breaks keep the output reproducible.
+ * Returns `[]` when `budget <= 0` (degenerate "no details" mode).
+ */
+export function pickCommitsForDetail(
+  commits: { sha: string; message: string; date: string }[],
+  budget: number,
+): string[] {
+  if (budget <= 0) return [];
+  const byScore = [...commits]
+    .map((c) => ({ sha: c.sha, score: messageScoreForDetail(c) }))
+    .sort(
+      (a, b) =>
+        b.score - a.score || (a.sha < b.sha ? -1 : a.sha > b.sha ? 1 : 0),
+    );
+  const topByScore = new Set(byScore.slice(0, 12).map((x) => x.sha));
+  const byDate = [...commits].sort(
+    (a, b) =>
+      timeMs(b.date) - timeMs(a.date) ||
+      (a.sha < b.sha ? -1 : a.sha > b.sha ? 1 : 0),
+  );
+  const topByDate = new Set(byDate.slice(0, 8).map((c) => c.sha));
+  const wanted = new Set<string>([...topByScore, ...topByDate]);
+  return commits
+    .filter((c) => wanted.has(c.sha))
+    .slice(0, budget)
+    .map((c) => c.sha);
+}
+
+/**
+ * Resolve the detail-fetch budget from (in priority order): an explicit call
+ * argument, the `GOSSIP_MAX_COMMIT_DETAILS` env var, or the default of 20.
+ * Negative / non-finite inputs fall through to the next source.
+ */
+export function resolveDetailBudget(explicit?: number): number {
+  if (typeof explicit === "number" && Number.isFinite(explicit) && explicit >= 0) {
+    return Math.floor(explicit);
+  }
+  const fromEnv = Number(process.env.GOSSIP_MAX_COMMIT_DETAILS);
+  if (Number.isFinite(fromEnv) && fromEnv >= 0) return Math.floor(fromEnv);
+  return DEFAULT_MAX_COMMIT_DETAILS;
+}
+
 export async function fetchRepoSnapshot(
   octokit: Octokit,
   ref: RepoRef,
-  options?: { sinceDays?: number; maxCommits?: number },
+  options?: {
+    sinceDays?: number;
+    maxCommits?: number;
+    /** Override the detail-fetch budget; otherwise resolved from env / default. */
+    maxCommitDetails?: number;
+  },
 ): Promise<RepoSnapshot> {
   const sinceDays = options?.sinceDays ?? 14;
   const maxCommits = options?.maxCommits ?? MAX_COMMITS;
@@ -47,9 +119,24 @@ export async function fetchRepoSnapshot(
     }),
   );
 
+  // Budget the detail fetches: only `wanted` shas get a getCommit call.
+  const budget = resolveDetailBudget(options?.maxCommitDetails);
+  const wanted = new Set(
+    pickCommitsForDetail(
+      commitList.slice(0, maxCommits).map((c) => ({
+        sha: c.sha,
+        message: c.commit.message,
+        date: c.commit.author?.date || c.commit.committer?.date || "",
+      })),
+      budget,
+    ),
+  );
+
   let statsIncomplete = false;
   const [detailed, activity] = await Promise.all([
     mapPool(commitList.slice(0, maxCommits), 5, async (c) => {
+      // Skipped by budget — keep list-level info, but this is NOT a failure.
+      if (!wanted.has(c.sha)) return toCommitStat(c);
       try {
         const { data } = await withGithubRetry(() =>
           octokit.repos.getCommit({
