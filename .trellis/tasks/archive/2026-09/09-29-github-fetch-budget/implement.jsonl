@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/core/backend/index.md", "reason": "core 包总纲与适配器边界"}
+{"file": ".trellis/spec/core/backend/error-handling.md", "reason": "抓取失败的降级语义：statsIncomplete 只代表请求失败"}
+{"file": ".trellis/spec/core/backend/pipeline.md", "reason": "runGossip 与抓取阶段在管线中的位置"}
+{"file": ".trellis/spec/core/backend/directory-structure.md", "reason": "github.ts 模块职责与放置位置"}

@@ -33,6 +33,9 @@ describe("analyzeSnapshot", () => {
     const a = analyzeSnapshot(snap);
     assert.equal(a.temperature.level, "frozen");
     assert.equal(a.awards.length, 0);
+    assert.equal(a.notablePulls.length, 0);
+    assert.equal(a.hotIssues.length, 0);
+    assert.equal(a.latestRelease, null);
   });
 
   it("awards night owl for early-hour UTC commit", () => {
@@ -51,6 +54,67 @@ describe("analyzeSnapshot", () => {
     const a = analyzeSnapshot(snap);
     assert.ok(a.notableCommits.length >= 1);
     assert.ok(a.awards.some((x) => x.id === "night-owl"));
+  });
+
+  it("derives notablePulls, hotIssues, latestRelease and activity awards", () => {
+    const snap = activitySnapshot();
+    const a = analyzeSnapshot(snap);
+    assert.ok(a.notablePulls.some((p) => p.number === 12 && p.merged));
+    assert.ok(a.hotIssues.some((i) => i.number === 7));
+    assert.equal(a.latestRelease?.tag, "v1.2.0");
+    assert.ok(a.awards.some((x) => x.id === "merge-machine"));
+    assert.ok(a.awards.some((x) => x.id === "ship-it"));
+    assert.match(
+      a.awards.find((x) => x.id === "merge-machine")!.reason,
+      /2 PRs merged/,
+    );
+    assert.match(a.awards.find((x) => x.id === "ship-it")!.reason, /v1\.2\.0/);
+  });
+
+  it("does not award merge-machine for a single merge", () => {
+    const snap = emptySnapshot();
+    snap.pulls = [
+      {
+        number: 1,
+        title: "Only one",
+        author: "solo",
+        state: "closed",
+        merged: true,
+        updatedAt: "2026-09-12T10:00:00.000Z",
+      },
+    ];
+    const a = analyzeSnapshot(snap);
+    assert.equal(a.notablePulls.length, 1);
+    assert.ok(!a.awards.some((x) => x.id === "merge-machine"));
+  });
+
+  it("ignores empty-tag releases for ship-it", () => {
+    const snap = emptySnapshot();
+    snap.releases = [
+      {
+        tag: "",
+        name: "oops",
+        publishedAt: "2026-09-14T18:00:00.000Z",
+        prerelease: false,
+      },
+    ];
+    const a = analyzeSnapshot(snap);
+    assert.equal(a.latestRelease, null);
+    assert.ok(!a.awards.some((x) => x.id === "ship-it"));
+  });
+
+  it("formats safely when snapshot.commits is missing", () => {
+    const snap = emptySnapshot();
+    const analyzed = analyzeSnapshot(snap);
+    // Simulate slim/legacy history payload without commits array.
+    (analyzed.snapshot as { commits?: unknown }).commits = undefined;
+    const tabloid = buildOfflineTabloid({
+      ...analyzed,
+      snapshot: analyzed.snapshot,
+      notableCommits: [],
+    });
+    const msg = formatTabloid(tabloid);
+    assert.match(msg.markdown, /0 commits/);
   });
 });
 
@@ -75,6 +139,39 @@ describe("buildOfflineTabloid", () => {
     }
     const msg = formatTabloid(tabloid);
     assert.match(msg.markdown, /repo-gossip|八卦|大片|体温/);
+  });
+
+  it("weaves PR/issue/release clues into offline copy and header counts", () => {
+    const snap = activitySnapshot();
+    snap.commits = [
+      {
+        sha: "def5678",
+        message: "feat: land the merge",
+        author: "merger",
+        date: "2026-09-10T12:00:00.000Z",
+        additions: 20,
+        deletions: 3,
+        files: ["x.ts"],
+      },
+    ];
+    const analyzed = analyzeSnapshot(snap);
+    const tabloid = buildOfflineTabloid(analyzed);
+    const blob = [
+      tabloid.epicTitle,
+      ...tabloid.awardsNarrative,
+      tabloid.temperatureLine,
+      ...tabloid.easterEggLines,
+      tabloid.closing,
+    ].join("\n");
+    assert.match(blob, /#12/);
+    assert.match(blob, /v1\.2\.0/);
+    assert.match(blob, /#7|Issue #7/);
+
+    const msg = formatTabloid(tabloid);
+    assert.match(msg.markdown, /PRs/);
+    assert.match(msg.markdown, /issues/);
+    assert.match(msg.markdown, /releases/);
+    assert.doesNotMatch(msg.markdown, /\*\*合并|\*\*议题|\*\*发版/);
   });
 });
 
@@ -113,6 +210,59 @@ function emptySnapshot(): RepoSnapshot {
     language: "TypeScript",
     defaultBranch: "main",
     commits: [],
+    pulls: [],
+    issues: [],
+    releases: [],
     fetchedAt: new Date().toISOString(),
   };
+}
+
+function activitySnapshot(): RepoSnapshot {
+  const snap = emptySnapshot();
+  snap.pulls = [
+    {
+      number: 12,
+      title: "Ship the gossip hooks",
+      author: "merger",
+      state: "closed",
+      merged: true,
+      updatedAt: "2026-09-12T10:00:00.000Z",
+    },
+    {
+      number: 11,
+      title: "Follow-up polish",
+      author: "merger",
+      state: "closed",
+      merged: true,
+      updatedAt: "2026-09-12T08:00:00.000Z",
+    },
+    {
+      number: 9,
+      title: "WIP: maybe later",
+      author: "slow",
+      state: "open",
+      merged: false,
+      updatedAt: "2026-09-11T08:00:00.000Z",
+    },
+  ];
+  snap.issues = [
+    {
+      number: 7,
+      title: "Flaky CI on Windows",
+      author: "reporter",
+      state: "open",
+      labels: ["bug"],
+      updatedAt: "2026-09-13T09:00:00.000Z",
+    },
+  ];
+  snap.releases = [
+    {
+      tag: "v1.2.0",
+      name: "v1.2.0 Gossip Night",
+      author: "releaser",
+      publishedAt: "2026-09-14T18:00:00.000Z",
+      prerelease: false,
+    },
+  ];
+  return snap;
 }

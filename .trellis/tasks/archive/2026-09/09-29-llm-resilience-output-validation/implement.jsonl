@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/core/backend/index.md", "reason": "core 包总纲：业务逻辑留在 core、人读文案中文、LLM key 英文的约定"}
+{"file": ".trellis/spec/core/backend/error-handling.md", "reason": "LLM 失败须降级为 fallback 并设置 llmError，不得吞掉错误"}
+{"file": ".trellis/spec/core/backend/quality-guidelines.md", "reason": "禁止 as 强转解析 LLM JSON，须用 String/Array.isArray 与手写守卫"}
+{"file": ".trellis/spec/core/backend/pipeline.md", "reason": "runGossip 三态 mode 语义，改动不得破坏 llm/offline/fallback"}
+{"file": ".trellis/spec/core/backend/logging-guidelines.md", "reason": "错误日志不得回显 BYOK 与 webhook 密钥"}

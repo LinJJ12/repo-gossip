@@ -5,12 +5,12 @@
 `runGossip(options)` in `packages/core/src/gossip.ts`:
 
 1. `parseRepoRef(options.repo)`
-2. `fetchRepoSnapshot` via Octokit (`sinceDays` default 14, max ~40 commits)
-3. `analyzeSnapshot` (pure)
+2. `fetchRepoSnapshot` via Octokit (`sinceDays` default 14, max ~40 commits; also windowed PR / Issue / Release lists with soft-fail → `activityIncomplete`)
+3. `analyzeSnapshot` (pure; commit-primary temperature; optional `merge-machine` / `ship-it` when evidence exists)
 4. Narrative:
    - **offline** if `options.offline` or missing `LLM_API_KEY` → `buildOfflineTabloid`
    - else `generateTabloid` → mode `llm` or `fallback` on failure
-5. `formatTabloid` → `{ plain, markdown }`
+5. `formatTabloid` → `{ plain, markdown }` (header may show PR/issue/release counts; no new section titles)
 
 Return shape:
 

@@ -28,6 +28,10 @@ export const envSchema = z.object({
   LLM_API_KEY: z.string().optional(),
   LLM_BASE_URL: z.string().default("https://api.openai.com/v1"),
   LLM_MODEL: z.string().default("gpt-4o-mini"),
+  /** Per-request LLM timeout. Optional; defaults to 20s. */
+  LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(20_000),
+  /** Max commits to pull per-detail stats for (the rest keep list-level info only). Optional; defaults to 20. */
+  GOSSIP_MAX_COMMIT_DETAILS: z.coerce.number().int().min(0).default(20),
   DISCORD_BOT_TOKEN: z.string().optional(),
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   FEISHU_APP_ID: z.string().optional(),
@@ -44,6 +48,10 @@ export function loadEnv(partial?: Record<string, string | undefined>): Env {
     LLM_API_KEY: partial?.LLM_API_KEY ?? process.env.LLM_API_KEY,
     LLM_BASE_URL: partial?.LLM_BASE_URL ?? process.env.LLM_BASE_URL,
     LLM_MODEL: partial?.LLM_MODEL ?? process.env.LLM_MODEL,
+    LLM_TIMEOUT_MS: partial?.LLM_TIMEOUT_MS ?? process.env.LLM_TIMEOUT_MS,
+    GOSSIP_MAX_COMMIT_DETAILS:
+      partial?.GOSSIP_MAX_COMMIT_DETAILS ??
+      process.env.GOSSIP_MAX_COMMIT_DETAILS,
     DISCORD_BOT_TOKEN:
       partial?.DISCORD_BOT_TOKEN ?? process.env.DISCORD_BOT_TOKEN,
     TELEGRAM_BOT_TOKEN:

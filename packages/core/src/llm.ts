@@ -8,23 +8,63 @@ export type LlmConfig = {
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
+/** Minimal `fetch` shape so tests can inject a stub without touching network. */
+export type ChatFetch = (url: string, init?: RequestInit) => Promise<Response>;
+
+export const DEFAULT_LLM_TIMEOUT_MS = 20_000;
+
+const TABLOID_KEYS = [
+  "epicTitle",
+  "awardsNarrative",
+  "temperatureLine",
+  "translations",
+  "easterEggLines",
+  "closing",
+] as const;
+
+export type ParsedTabloid = {
+  /** `null` when the payload yielded no usable field at all. */
+  tabloid: Tabloid | null;
+  /** Fields that fell back to local values instead of LLM copy. */
+  degradedFields: string[];
+};
+
+export type GenerateTabloidOptions = {
+  timeoutMs?: number;
+  fetchImpl?: ChatFetch;
+};
+
 export async function generateTabloid(
   analyzed: AnalyzedGossip,
   llm: LlmConfig,
-): Promise<{ tabloid: Tabloid; mode: "llm" | "fallback"; llmError?: string }> {
+  options?: GenerateTabloidOptions,
+): Promise<{
+  tabloid: Tabloid;
+  mode: "llm" | "fallback";
+  llmError?: string;
+  degradedFields?: string[];
+}> {
   const facts = buildFactSheet(analyzed);
 
   try {
-    const raw = await chatCompletion(llm, [
-      { role: "system", content: SYSTEM_PROMPT },
-      {
-        role: "user",
-        content:
-          "\u6839\u636e\u4ee5\u4e0b\u4ed3\u5e93\u4e8b\u5b9e\uff0c\u751f\u6210\u4e00\u4efd\u300c\u9879\u76ee\u516b\u5366\u5c0f\u62a5\u300dJSON\u3002\n\n" +
-          facts,
-      },
-    ]);
-    return { tabloid: parseTabloidJson(raw, analyzed), mode: "llm" };
+    const raw = await chatCompletion(
+      llm,
+      [
+        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "user",
+          content:
+            "根据以下仓库事实，生成一份「项目八卦小报」JSON。\n\n" +
+            facts,
+        },
+      ],
+      options,
+    );
+    const { tabloid, degradedFields } = safeParseTabloid(raw, analyzed);
+    if (!tabloid) {
+      throw new Error("LLM 返回内容中没有任何可用的小报字段");
+    }
+    return { tabloid, mode: "llm", degradedFields };
   } catch (err) {
     const llmError = err instanceof Error ? err.message : String(err);
     console.error("[llm]", llmError);
@@ -37,11 +77,20 @@ export async function generateTabloid(
 }
 
 const SYSTEM_PROMPT =
-  "You are a Chinese tabloid editor for GitHub repos. Be funny and epic, never insult people. Output ONE JSON object only. Use EXACTLY these English keys: epicTitle, awardsNarrative, temperatureLine, translations, easterEggLines, closing. Each translations item MUST be {\"original\":\"commit message\",\"drama\":\"Chinese rewrite\",\"author\":\"name\"}. Never leave drama empty. All human-readable string values must be Chinese.";
+  "You are a Chinese tabloid editor for GitHub repos. Be funny and epic, never insult people. Output ONE JSON object only. Use EXACTLY these English keys: epicTitle, awardsNarrative, temperatureLine, translations, easterEggLines, closing. Facts may include recent PRs, issues, and releases — weave them into awardsNarrative, temperatureLine, closing, or easterEggLines when present (cite #N or release tags). translations stay commit-message oriented: each item MUST be {\"original\":\"commit message\",\"drama\":\"Chinese rewrite\",\"author\":\"name\"}. Never leave drama empty. All human-readable string values must be Chinese.";
 
 function buildFactSheet(a: AnalyzedGossip): string {
-  const { snapshot: s, temperature: t, awards, easterEggs, topAuthors, notableCommits } =
-    a;
+  const {
+    snapshot: s,
+    temperature: t,
+    awards,
+    easterEggs,
+    topAuthors,
+    notableCommits,
+    notablePulls,
+    hotIssues,
+    latestRelease,
+  } = a;
 
   return JSON.stringify(
     {
@@ -50,6 +99,9 @@ function buildFactSheet(a: AnalyzedGossip): string {
       language: s.language,
       stars: s.stars,
       commitCount: s.commits.length,
+      pullCount: s.pulls?.length ?? 0,
+      issueCount: s.issues?.length ?? 0,
+      releaseCount: s.releases?.length ?? 0,
       temperature: {
         label: `${t.emoji} ${t.label}`,
         commitsLast3Days: t.commitsLast3Days,
@@ -73,6 +125,29 @@ function buildFactSheet(a: AnalyzedGossip): string {
         additions: c.additions,
         deletions: c.deletions,
       })),
+      notablePulls: (notablePulls ?? []).map((p) => ({
+        number: p.number,
+        title: p.title,
+        author: p.author,
+        state: p.state,
+        merged: p.merged,
+      })),
+      hotIssues: (hotIssues ?? []).map((i) => ({
+        number: i.number,
+        title: i.title,
+        author: i.author,
+        state: i.state,
+        labels: i.labels,
+      })),
+      latestRelease: latestRelease
+        ? {
+            tag: latestRelease.tag,
+            name: latestRelease.name,
+            author: latestRelease.author,
+            publishedAt: latestRelease.publishedAt,
+            prerelease: latestRelease.prerelease,
+          }
+        : null,
     },
     null,
     2,
@@ -82,8 +157,13 @@ function buildFactSheet(a: AnalyzedGossip): string {
 async function chatCompletion(
   llm: LlmConfig,
   messages: ChatMessage[],
+  options?: GenerateTabloidOptions,
 ): Promise<string> {
   const url = `${llm.baseUrl.replace(/\/$/, "")}/chat/completions`;
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_LLM_TIMEOUT_MS;
+  const fetchImpl =
+    options?.fetchImpl ??
+    ((u: string, init?: RequestInit) => fetch(u, init));
 
   const attempt = async (withJsonFormat: boolean) => {
     const body: Record<string, unknown> = {
@@ -95,14 +175,19 @@ async function chatCompletion(
       body.response_format = { type: "json_object" };
     }
 
-    const res = await fetch(url, {
+    const init: RequestInit = {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${llm.apiKey}`,
       },
       body: JSON.stringify(body),
-    });
+    };
+    if (supportsTimeoutSignal()) {
+      init.signal = AbortSignal.timeout(timeoutMs);
+    }
+
+    const res = await fetchImpl(url, init);
 
     if (!res.ok) {
       const text = await res.text();
@@ -120,55 +205,109 @@ async function chatCompletion(
   try {
     return await attempt(true);
   } catch (err) {
+    if (isAbortError(err)) throw timeoutError(timeoutMs);
     const msg = err instanceof Error ? err.message : "";
     if (/response_format|json_object/i.test(msg)) {
-      return await attempt(false);
+      try {
+        return await attempt(false);
+      } catch (retryErr) {
+        if (isAbortError(retryErr)) throw timeoutError(timeoutMs);
+        throw retryErr;
+      }
     }
     throw err;
   }
 }
 
-function parseTabloidJson(raw: string, analyzed: AnalyzedGossip): Tabloid {
-  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const cleaned = (fenced?.[1] ?? raw).trim();
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-  const jsonText =
-    start >= 0 && end > start ? cleaned.slice(start, end + 1) : cleaned;
-  const parsed = JSON.parse(jsonText) as Record<string, unknown>;
+function supportsTimeoutSignal(): boolean {
+  return (
+    typeof AbortSignal !== "undefined" &&
+    typeof (AbortSignal as { timeout?: unknown }).timeout === "function"
+  );
+}
+
+function isAbortError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return err.name === "AbortError" || err.name === "TimeoutError";
+}
+
+function timeoutError(timeoutMs: number): Error {
+  return new Error(`LLM request timed out after ${timeoutMs}ms`);
+}
+
+/** Strip markdown fences and trailing chatter. Deterministic text surgery only. */
+export function normalizeRawJson(raw: string): string {
+  let text = raw.replace(/^﻿/, "").trim();
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) {
+    text = fenced[1].trim();
+  }
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  return start >= 0 && end > start ? text.slice(start, end + 1) : text;
+}
+
+function tryParseObject(raw: string): Record<string, unknown> | null {
+  const cleaned = normalizeRawJson(raw);
+  try {
+    const parsed = JSON.parse(cleaned) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Never throws. Falls back per field, so one broken key costs that key only —
+ * the whole tabloid degrades to local templates only when nothing is usable.
+ */
+export function safeParseTabloid(
+  raw: string,
+  analyzed: AnalyzedGossip,
+): ParsedTabloid {
+  const parsed = tryParseObject(raw);
+  if (!parsed) return { tabloid: null, degradedFields: [] };
+  if (!TABLOID_KEYS.some((k) => parsed[k] !== undefined)) {
+    return { tabloid: null, degradedFields: [] };
+  }
+
+  const degradedFields: string[] = [];
+
+  const epicTitle = pickNonEmptyString(parsed.epicTitle);
+  if (!epicTitle) degradedFields.push("epicTitle");
+
+  const temperatureLine = pickNonEmptyString(parsed.temperatureLine);
+  if (!temperatureLine) degradedFields.push("temperatureLine");
+
+  const closing = pickNonEmptyString(parsed.closing);
+  if (!closing) degradedFields.push("closing");
+
+  const awardsNarrative = pickStringArray(parsed.awardsNarrative);
+  if (!awardsNarrative) degradedFields.push("awardsNarrative");
+
+  const easterEggLines = pickStringArray(parsed.easterEggLines);
+  if (!easterEggLines) degradedFields.push("easterEggLines");
 
   let translations = normalizeTranslations(parsed.translations);
   if (translations.length === 0 || translations.every((t) => !t.drama.trim())) {
-    translations = analyzed.notableCommits.slice(0, 5).map((c) => ({
-      original: c.message,
-      drama: dramatizeLocally(c.message),
-      author: c.author,
-    }));
+    degradedFields.push("translations");
+    translations = localTranslations(analyzed);
   }
 
   return {
-    epicTitle: String(parsed.epicTitle || fallbackTitle(analyzed)),
-    awardsNarrative: Array.isArray(parsed.awardsNarrative)
-      ? parsed.awardsNarrative.map(String)
-      : analyzed.awards.map(
-          (a) =>
-            `${a.emoji}\u300c${a.title}\u300d\u2014\u2014${a.winner} (${a.reason})`,
-        ),
-    temperatureLine: String(
-      parsed.temperatureLine ||
-        `${analyzed.temperature.emoji} ${analyzed.temperature.label}`,
-    ),
-    translations,
-    easterEggLines: Array.isArray(parsed.easterEggLines)
-      ? parsed.easterEggLines.map(String)
-      : analyzed.easterEggs.map(
-          (e) =>
-            `${e.emoji} ${e.tag}\u2014\u2014${e.author} @ ${e.sha}: \u300c${e.evidence}\u300d`,
-        ),
-    closing: String(
-      parsed.closing || "\u672c\u671f\u516b\u5366\u5230\u6b64\u7ed3\u675f\u3002",
-    ),
-    analyzed,
+    tabloid: {
+      epicTitle: epicTitle ?? fallbackTitle(analyzed),
+      awardsNarrative: awardsNarrative ?? localAwardsNarrative(analyzed),
+      temperatureLine: temperatureLine ?? localTemperatureLine(analyzed),
+      translations,
+      easterEggLines: easterEggLines ?? localEasterEggLines(analyzed),
+      closing: closing ?? "本期八卦到此结束。",
+      analyzed,
+    },
+    degradedFields,
   };
 }
 
@@ -188,8 +327,8 @@ export function normalizeTranslations(raw: unknown): {
         "message",
         "src",
         "source",
-        "\u539f\u6587",
-        "\u63d0\u4ea4",
+        "原文",
+        "提交",
       ]);
       const drama = pickStr(t, [
         "drama",
@@ -197,18 +336,12 @@ export function normalizeTranslations(raw: unknown): {
         "rewrite",
         "gossip",
         "text",
-        "\u7ffb\u8bd1",
-        "\u8bd1\u6587",
-        "\u516b\u5366",
-        "\u6da8\u8bd1",
+        "翻译",
+        "译文",
+        "八卦",
+        "漫译",
       ]);
-      const author = pickStr(t, [
-        "author",
-        "by",
-        "user",
-        "\u4f5c\u8005",
-        "\u4f5c\u8005\u540d",
-      ]);
+      const author = pickStr(t, ["author", "by", "user", "作者", "作者名"]);
       if (!original && !drama) return null;
       return { original, drama, author };
     })
@@ -225,60 +358,122 @@ function pickStr(obj: Record<string, unknown>, keys: string[]): string {
   return "";
 }
 
+function pickNonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function pickStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  return value.map((x) => String(x));
+}
+
+function localAwardsNarrative(a: AnalyzedGossip): string[] {
+  return a.awards.map(
+    (x) => `${x.emoji}「${x.title}」——${x.winner} (${x.reason})`,
+  );
+}
+
+function localTemperatureLine(a: AnalyzedGossip): string {
+  return `${a.temperature.emoji}「${a.temperature.label}」`;
+}
+
+function localEasterEggLines(a: AnalyzedGossip): string[] {
+  return a.easterEggs.map(
+    (e) => `${e.emoji} ${e.tag}——${e.author} @ ${e.sha}: 「${e.evidence}」`,
+  );
+}
+
+function localTranslations(a: AnalyzedGossip) {
+  return a.notableCommits.slice(0, 5).map((c) => ({
+    original: c.message,
+    drama: dramatizeLocally(c.message),
+    author: c.author,
+  }));
+}
+
 function fallbackTabloid(analyzed: AnalyzedGossip): Tabloid {
-  const offline = {
+  const activityBits = activityClues(analyzed);
+  const eggLines = localEasterEggLines(analyzed);
+  for (const clue of activityBits) {
+    if (eggLines.length >= 5) break;
+    eggLines.push(clue);
+  }
+
+  return {
     epicTitle: fallbackTitle(analyzed),
-    awardsNarrative: analyzed.awards.map(
-      (a) =>
-        `${a.emoji}\u300c${a.title}\u300d\u2014\u2014${a.winner} (${a.reason})`,
-    ),
-    temperatureLine: `${analyzed.temperature.emoji}\u300c${analyzed.temperature.label}\u300d`,
-    translations: analyzed.notableCommits.slice(0, 5).map((c) => ({
-      original: c.message,
-      drama: dramatizeLocally(c.message),
-      author: c.author,
-    })),
-    easterEggLines: analyzed.easterEggs.map(
-      (e) =>
-        `${e.emoji} ${e.tag}\u2014\u2014${e.author} @ ${e.sha}: \u300c${e.evidence}\u300d`,
-    ),
+    awardsNarrative: localAwardsNarrative(analyzed),
+    temperatureLine: `${localTemperatureLine(analyzed)}${
+      activityBits[0] ? `——${activityBits[0]}` : ""
+    }`,
+    translations: localTranslations(analyzed),
+    easterEggLines: eggLines,
     closing:
-      "\uff08LLM unavailable; local templates\uff09",
+      activityBits.length > 0
+        ? `（LLM unavailable; local templates） 仍有动态素材：${activityBits.slice(0, 2).join("；")}`
+        : "（LLM unavailable; local templates）",
     analyzed,
   };
-  return offline;
+}
+
+function activityClues(a: AnalyzedGossip): string[] {
+  const clues: string[] = [];
+  for (const p of (a.notablePulls ?? []).slice(0, 2)) {
+    clues.push(
+      `PR #${p.number} 「${truncateClue(p.title)}」${p.merged ? " merged" : ""}`,
+    );
+  }
+  for (const i of (a.hotIssues ?? []).slice(0, 2)) {
+    clues.push(`Issue #${i.number} 「${truncateClue(i.title)}」`);
+  }
+  if (a.latestRelease?.tag) {
+    clues.push(
+      `发版 ${a.latestRelease.tag}${a.latestRelease.name && a.latestRelease.name !== a.latestRelease.tag ? ` 「${truncateClue(a.latestRelease.name)}」` : ""}`,
+    );
+  }
+  return clues;
+}
+
+function truncateClue(s: string, n = 48): string {
+  const t = s.replace(/[\r\n\t]+/g, " ").replace(/ +/g, " ").trim();
+  return t.length <= n ? t : `${t.slice(0, n - 1)}…`;
 }
 
 function fallbackTitle(a: AnalyzedGossip): string {
   const name = a.snapshot.ref.repo;
+  const release = a.latestRelease;
+  if (release?.tag && a.temperature.level !== "frozen") {
+    return `《${name}：${release.tag} 上线夜》`;
+  }
   switch (a.temperature.level) {
     case "blazing":
-      return `\u300a${name}\uff1a\u8fde\u7eed\u52a0\u73ed\u7684\u4e03\u4e2a\u65e5\u591c\u300b`;
+      return `《${name}：连续加班的七个日夜》`;
     case "warm":
-      return `\u300a${name} \u7684\u5fae\u70ed\u5348\u540e\u300b`;
+      return `《${name} 的微热午后》`;
     case "cool":
-      return `\u300a${name}\uff1a\u8fd8\u80fd\u62a2\u6551\u4e00\u4e0b\u300b`;
+      return `《${name}：还能抢救一下》`;
     default:
-      return `\u300a${name}\uff1a\u51b0\u5c01\u4ed3\u5e93\u7684\u6f2b\u957f\u51ac\u5929\u300b`;
+      return `《${name}：冰封仓库的漫长冬天》`;
   }
 }
 
 export function dramatizeLocally(message: string): string {
   const m = message.trim();
   if (/^(fix|bugfix|hotfix)/i.test(m)) {
-    return `\u5f00\u53d1\u8005\u5728\u952e\u76d8\u5192\u70df\u7684\u591c\u665a\u4fee\u590d\u4e86\u81f4\u547d\u9690\u60a3\uff1a\u300c${m}\u300d`;
+    return `开发人员在键盘冒烟的夜晚修复了致命隐患：「${m}」`;
   }
   if (/^(feat|feature|add)/i.test(m)) {
-    return `\u4ed3\u5e93\u8fce\u6765\u65b0\u80fd\u529b\uff1a\u300c${m}\u300d`;
+    return `仓库迎来新能力：「${m}」`;
   }
   if (/^(refactor)/i.test(m)) {
-    return `\u6709\u4eba\u9ed8\u9ed8\u62c6\u6389\u4e86 legacy\uff1a\u300c${m}\u300d`;
+    return `有人默默拆掉了 legacy：「${m}」`;
   }
   if (/^(wip|tmp|test|misc|update|chore)/i.test(m) || m.length <= 8) {
-    return `\u63d0\u4ea4\u4fe1\u606f\u5199\u4e86\u300c${m}\u300d\u3002\u7ffb\u8bd1\uff1a\u6211\u6539\u4e86\uff0c\u4f46\u6211\u4e0d\u60f3\u89e3\u91ca\u3002`;
+    return `提交信息写了「${m}」。翻译：我改了，但我不想解释。`;
   }
   if (/remove|delete|cleanup/i.test(m)) {
-    return `\u6e05\u9053\u592b\u51fa\u52a8\uff1a\u300c${m}\u300d`;
+    return `清道夫出动：「${m}」`;
   }
-  return `\u5f53\u4e8b\u4eba\u8f7b\u63cf\u6de1\u5199\u9053\u300c${m}\u300d\u3002\u77e5\u60c5\u4eba\u58eb\u900f\u9732\uff1a\u4e8b\u60c5\u8fdc\u6ca1\u6709\u8fd9\u4e48\u7b80\u5355\u3002`;
+  return `当事人轻描淡写道「${m}」。知情人士透露：事情远没有这么简单。`;
 }

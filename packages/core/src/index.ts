@@ -4,6 +4,9 @@ export type {
   AnalyzedGossip,
   PlatformMessage,
   CommitStat,
+  PullStat,
+  IssueStat,
+  ReleaseStat,
   RepoSnapshot,
   Temperature,
   Award,
@@ -34,13 +37,33 @@ export type {
 
 export { analyzeSnapshot } from "./analyzer.js";
 export { formatTabloid, toDiscordEmbed, toFeishuCard } from "./format.js";
-export { createOctokit, fetchRepoSnapshot } from "./github.js";
+export {
+  createOctokit,
+  fetchRepoSnapshot,
+  messageScoreForDetail,
+  pickCommitsForDetail,
+  resolveDetailBudget,
+  DEFAULT_MAX_COMMIT_DETAILS,
+} from "./github.js";
 export {
   withGithubRetry,
   isGithubRateLimitError,
   enrichGithubError,
 } from "./github-retry.js";
-export { generateTabloid, dramatizeLocally, normalizeTranslations } from "./llm.js";
+export {
+  generateTabloid,
+  dramatizeLocally,
+  normalizeTranslations,
+  normalizeRawJson,
+  safeParseTabloid,
+  DEFAULT_LLM_TIMEOUT_MS,
+} from "./llm.js";
+export type {
+  LlmConfig,
+  ChatFetch,
+  GenerateTabloidOptions,
+  ParsedTabloid,
+} from "./llm.js";
 
 export {
   consumeRateLimit,

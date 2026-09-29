@@ -16,13 +16,15 @@
 
 | | |
 |---|---|
-| **本周大片标题** | 近期提交写成「影评式」标题 |
-| **颁奖典礼** | 卷王、夜猫子等趣味奖项 |
+| **本周大片标题** | 近期提交写成「影评式」标题（并织入 PR / Issue / 发版线索） |
+| **颁奖典礼** | 卷王、夜猫子、合并机器、发版烟花等趣味奖项 |
 | **项目体温** | 活跃度一眼可读 |
 | **提交信翻译** | commit message → 八卦文案 |
 | **彩蛋侦探** | 可疑调试痕迹等梗 |
 
 没有 LLM 也能出报：CLI 加 `--offline`，Web / 扩展关掉「调用 LLM」或勾选「仅本地模板」。
+
+出报会顺带参考近窗内的 **PR / Issue / Release**（织进现有栏目；某路接口失败会降级并给出警告，不整单失败）。
 
 ---
 
@@ -160,6 +162,8 @@ curl -X POST https://<domain>/api/gossip \
 |------|------|
 | `GITHUB_TOKEN` | 提高限额 / 读私有仓 |
 | `LLM_API_KEY` · `LLM_BASE_URL` · `LLM_MODEL` | 兼容 OpenAI Chat Completions |
+| `LLM_TIMEOUT_MS` | 单次 LLM 请求超时（毫秒，默认 20000），超时回落本地模板 |
+| `GOSSIP_MAX_COMMIT_DETAILS` | 单次出报拉取提交详情的 commit 上限（默认 20，设 0 退化为纯列表出报） |
 | `GOSSIP_OFFLINE` | `1` 强制本地模板 |
 | `WEBHOOK_SECRET` | 内部调用校验（可选） |
 | `GOSSIP_REQUIRE_WEBHOOK_SECRET` | `1` 时生产强制鉴权 |

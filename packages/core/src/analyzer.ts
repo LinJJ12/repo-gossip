@@ -3,6 +3,9 @@ import type {
   Award,
   CommitStat,
   EasterEgg,
+  IssueStat,
+  PullStat,
+  ReleaseStat,
   RepoSnapshot,
   Temperature,
 } from "./types.js";
@@ -43,14 +46,24 @@ export function analyzeSnapshot(snapshot: RepoSnapshot): AnalyzedGossip {
   const commits = [...snapshot.commits].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
   );
+  const pulls = snapshot.pulls ?? [];
+  const issues = snapshot.issues ?? [];
+  const releases = snapshot.releases ?? [];
+
+  const notablePulls = pickNotablePulls(pulls);
+  const hotIssues = pickHotIssues(issues);
+  const latestRelease = pickLatestRelease(releases);
 
   return {
     snapshot,
     temperature: calcTemperature(commits),
-    awards: calcAwards(commits),
+    awards: calcAwards(commits, pulls, latestRelease),
     easterEggs: findEasterEggs(commits),
     topAuthors: rankAuthors(commits),
     notableCommits: pickNotable(commits),
+    notablePulls,
+    hotIssues,
+    latestRelease,
   };
 }
 
@@ -114,81 +127,147 @@ function calcTemperature(commits: CommitStat[]): Temperature {
   };
 }
 
-function calcAwards(commits: CommitStat[]): Award[] {
-  if (commits.length === 0) return [];
-
+function calcAwards(
+  commits: CommitStat[],
+  pulls: PullStat[],
+  latestRelease: ReleaseStat | null,
+): Award[] {
   const awards: Award[] = [];
 
-  const nightOwl = commits
-    .map((c) => ({ c, hour: new Date(c.date).getUTCHours() }))
-    .filter(({ hour }) => hour >= 0 && hour < 5)
-    .sort((a, b) => a.hour - b.hour)[0];
-  if (nightOwl) {
-    const h = new Date(nightOwl.c.date).getUTCHours();
-    const m = new Date(nightOwl.c.date).getUTCMinutes();
-    awards.push({
-      id: "night-owl",
-      title: "\u6700\u4f73\u5377\u738b\u5956",
-      emoji: "\uD83C\uDFC6",
-      winner: nightOwl.c.author,
-      reason: `${pad(h)}:${pad(m)} UTC still shipping \u300c${truncate(nightOwl.c.message, 40)}\u300d`,
-    });
+  if (commits.length > 0) {
+    const nightOwl = commits
+      .map((c) => ({ c, hour: new Date(c.date).getUTCHours() }))
+      .filter(({ hour }) => hour >= 0 && hour < 5)
+      .sort((a, b) => a.hour - b.hour)[0];
+    if (nightOwl) {
+      const h = new Date(nightOwl.c.date).getUTCHours();
+      const m = new Date(nightOwl.c.date).getUTCMinutes();
+      awards.push({
+        id: "night-owl",
+        title: "\u6700\u4f73\u5377\u738b\u5956",
+        emoji: "\uD83C\uDFC6",
+        winner: nightOwl.c.author,
+        reason: `${pad(h)}:${pad(m)} UTC still shipping \u300c${truncate(nightOwl.c.message, 40)}\u300d`,
+      });
+    }
+
+    const cleaner = [...commits].sort(
+      (a, b) => b.deletions - b.additions - (a.deletions - a.additions),
+    )[0];
+    if (cleaner && cleaner.deletions > cleaner.additions && cleaner.deletions >= 20) {
+      awards.push({
+        id: "cleaner",
+        title: "\u4ee3\u7801\u6e05\u9053\u592b\u5956",
+        emoji: "\uD83E\uDDF9",
+        winner: cleaner.author,
+        reason: `-${cleaner.deletions} / +${cleaner.additions}`,
+      });
+    }
+
+    const dumpTruck = [...commits].sort(
+      (a, b) => b.additions + b.deletions - (a.additions + a.deletions),
+    )[0];
+    if (dumpTruck && dumpTruck.additions + dumpTruck.deletions >= 200) {
+      awards.push({
+        id: "dump-truck",
+        title: "\u62c6\u8fc1\u529e\u7279\u522b\u5956",
+        emoji: "\uD83C\uDFD7\uFE0F",
+        winner: dumpTruck.author,
+        reason: `${dumpTruck.additions + dumpTruck.deletions} LOC touched`,
+      });
+    }
+
+    const byCount = rankAuthors(commits);
+    if (byCount[0] && byCount[0].commits >= 3) {
+      awards.push({
+        id: "mvp",
+        title: "\u672c\u5468 MVP",
+        emoji: "\u2B50",
+        winner: byCount[0].name,
+        reason: `${byCount[0].commits} commits`,
+      });
+    }
+
+    const oneLiners = commits.filter(
+      (c) =>
+        /^(fix|wip|tmp|misc|changes?|update)\s*$/i.test(c.message) ||
+        /^(fix|chore|update):\s*(bug)?\s*$/i.test(c.message) ||
+        c.message.length <= 8,
+    );
+    if (oneLiners[0]) {
+      awards.push({
+        id: "vague",
+        title: "\u5e9f\u8bdd\u6587\u5b66\u91d1\u53e5\u5956",
+        emoji: "\uD83D\uDCAC",
+        winner: oneLiners[0].author,
+        reason: `\u300c${oneLiners[0].message}\u300d`,
+      });
+    }
   }
 
-  const cleaner = [...commits].sort(
-    (a, b) => b.deletions - b.additions - (a.deletions - a.additions),
+  // Activity awards (0–2 when evidence exists); reserve slots so they aren't sliced away.
+  const activityAwards: Award[] = [];
+
+  const mergedByAuthor = new Map<string, number>();
+  for (const p of pulls) {
+    if (!p.merged) continue;
+    mergedByAuthor.set(p.author, (mergedByAuthor.get(p.author) ?? 0) + 1);
+  }
+  const mergeChamp = [...mergedByAuthor.entries()].sort(
+    (a, b) => b[1] - a[1],
   )[0];
-  if (cleaner && cleaner.deletions > cleaner.additions && cleaner.deletions >= 20) {
-    awards.push({
-      id: "cleaner",
-      title: "\u4ee3\u7801\u6e05\u9053\u592b\u5956",
-      emoji: "\uD83E\uDDF9",
-      winner: cleaner.author,
-      reason: `-${cleaner.deletions} / +${cleaner.additions}`,
+  // Require ≥2 merges — a single merge is not a "machine".
+  if (mergeChamp && mergeChamp[1] >= 2) {
+    activityAwards.push({
+      id: "merge-machine",
+      title: "\u5408\u5e76\u673a\u5668\u4eba\u5956",
+      emoji: "\uD83E\uDD16",
+      winner: mergeChamp[0],
+      reason: `${mergeChamp[1]} PRs merged`,
     });
   }
 
-  const dumpTruck = [...commits].sort(
-    (a, b) => b.additions + b.deletions - (a.additions + a.deletions),
-  )[0];
-  if (dumpTruck && dumpTruck.additions + dumpTruck.deletions >= 200) {
-    awards.push({
-      id: "dump-truck",
-      title: "\u62c6\u8fc1\u529e\u7279\u522b\u5956",
-      emoji: "\uD83C\uDFD7\uFE0F",
-      winner: dumpTruck.author,
-      reason: `${dumpTruck.additions + dumpTruck.deletions} LOC touched`,
+  if (latestRelease?.tag) {
+    activityAwards.push({
+      id: "ship-it",
+      title: "\u53d1\u7248\u70df\u82b1\u5956",
+      emoji: "\uD83D\uDE80",
+      winner: latestRelease.author || latestRelease.tag,
+      reason: `${latestRelease.tag}${latestRelease.name && latestRelease.name !== latestRelease.tag ? ` \u300c${truncate(latestRelease.name, 36)}\u300d` : ""}`,
     });
   }
 
-  const byCount = rankAuthors(commits);
-  if (byCount[0] && byCount[0].commits >= 3) {
-    awards.push({
-      id: "mvp",
-      title: "\u672c\u5468 MVP",
-      emoji: "\u2B50",
-      winner: byCount[0].name,
-      reason: `${byCount[0].commits} commits`,
-    });
-  }
+  const room = Math.max(0, 5 - activityAwards.length);
+  return [...awards.slice(0, room), ...activityAwards];
+}
 
-  const oneLiners = commits.filter(
-    (c) =>
-      /^(fix|wip|tmp|misc|changes?|update)\s*$/i.test(c.message) ||
-      /^(fix|chore|update):\s*(bug)?\s*$/i.test(c.message) ||
-      c.message.length <= 8,
-  );
-  if (oneLiners[0]) {
-    awards.push({
-      id: "vague",
-      title: "\u5e9f\u8bdd\u6587\u5b66\u91d1\u53e5\u5956",
-      emoji: "\uD83D\uDCAC",
-      winner: oneLiners[0].author,
-      reason: `\u300c${oneLiners[0].message}\u300d`,
-    });
-  }
+function pickNotablePulls(pulls: PullStat[]): PullStat[] {
+  const merged = pulls.filter((p) => p.merged);
+  const pool = merged.length > 0 ? merged : pulls;
+  return [...pool]
+    .sort((a, b) => timeMs(b.updatedAt) - timeMs(a.updatedAt))
+    .slice(0, 5);
+}
 
-  return awards.slice(0, 5);
+function pickHotIssues(issues: IssueStat[]): IssueStat[] {
+  const open = issues.filter((i) => i.state === "open");
+  const pool = open.length > 0 ? open : issues;
+  return [...pool]
+    .sort((a, b) => timeMs(b.updatedAt) - timeMs(a.updatedAt))
+    .slice(0, 5);
+}
+
+function pickLatestRelease(releases: ReleaseStat[]): ReleaseStat | null {
+  const usable = releases.filter((r) => r.tag);
+  if (usable.length === 0) return null;
+  return [...usable].sort(
+    (a, b) => timeMs(b.publishedAt) - timeMs(a.publishedAt),
+  )[0]!;
+}
+
+function timeMs(iso: string): number {
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : 0;
 }
 
 function findEasterEggs(commits: CommitStat[]): EasterEgg[] {

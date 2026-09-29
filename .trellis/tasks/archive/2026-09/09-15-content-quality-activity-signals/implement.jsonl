@@ -1,0 +1,7 @@
+{"file": ".trellis/spec/core/backend/index.md", "reason": "core package checklist: extend runGossip pipeline, Chinese copy, English LLM keys"}
+{"file": ".trellis/spec/core/backend/pipeline.md", "reason": "mode semantics and LLM JSON contract must stay stable while enriching facts"}
+{"file": ".trellis/spec/core/backend/directory-structure.md", "reason": "fetch vs pure analyzer ownership boundaries"}
+{"file": ".trellis/spec/core/backend/error-handling.md", "reason": "soft-fail incomplete GitHub activity fetches with warnings"}
+{"file": ".trellis/spec/core/backend/quality-guidelines.md", "reason": "fixture unit tests; offline path without LLM"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "core change must not force adapter churn"}
+{"file": ".trellis/tasks/09-15-content-quality-activity-signals/design.md", "reason": "MVP data shapes, caps, weave-only format decision"}

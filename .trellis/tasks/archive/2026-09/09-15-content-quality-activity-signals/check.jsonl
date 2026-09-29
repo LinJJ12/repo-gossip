@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/core/backend/index.md", "reason": "Quality Check: exports, fallback, typecheck/test"}
+{"file": ".trellis/spec/core/backend/pipeline.md", "reason": "verify modes and LLM key contract unchanged"}
+{"file": ".trellis/spec/core/backend/quality-guidelines.md", "reason": "offline testable; no DB; pure analyzer"}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "ensure no duplicated fetch/analyze pipelines in adapters"}
+{"file": ".trellis/tasks/09-15-content-quality-activity-signals/prd.md", "reason": "acceptance: non-commit signals visible; degrade path; no adapter API break"}

@@ -22,7 +22,11 @@ repo-gossip/
 
 ```
 repo URL
-  → packages/core (fetch → analyze → LLM/offline → tabloid)
+  → packages/core
+       fetch: commits + PR / Issue / Release（窗口内；活动抓取失败则降级）
+              commit 详情（增删行/改动文件）按 GOSSIP_MAX_COMMIT_DETAILS 预算采样，
+              其余 commit 保留列表级信息（additions/deletions=0、files=[]），不计入 statsIncomplete
+       analyze → LLM / offline → tabloid（新信号织入既有栏目，不新增独立章节）
   → apps/web | apps/bot | api/* | apps/extension
 ```
 
