@@ -1,0 +1,31 @@
+{
+  "id": "pipeline-resilience",
+  "name": "pipeline-resilience",
+  "title": "repo-gossip 管线韧性与质量改良",
+  "description": "针对出报管线的可靠性与可维护性做系统改良：LLM 调用韧性与输出校验、GitHub 抓取预算化、核心契约单测补强，并收尾归档两个已完成的在途任务。",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": "core",
+  "priority": "P1",
+  "creator": "Administrator",
+  "assignee": "Administrator",
+  "createdAt": "2026-09-29",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "feat/content-quality-activity-signals",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "09-29-llm-resilience-output-validation",
+    "09-29-github-fetch-budget",
+    "09-29-core-contract-tests",
+    "09-29-closeout-archive-in-progress"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
