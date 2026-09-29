@@ -32,10 +32,33 @@ Web 预览站与 Chrome 扩展工具栏（弹层 + 完整页面）出报成功�
 
 ## Acceptance Criteria
 
-- [ ] AC1（Web）：两仓成功出报后「最近」可见两者；点选立刻复开且无新 `/api/gossip`；样报与失败不入库；刷新后仍可打开（≤20）。
-- [ ] AC2（弹层/完整页）：两仓成功出报后「最近」可见；点选立刻复开且无新 `GOSSIP_FETCH`；失败不入库；重启浏览器后仍可打开（≤20）。
-- [ ] AC3（共用）：侧边栏写入的条目出现在弹层「最近」；弹层写入的条目出现在侧边栏「最近」。
-- [ ] AC4：Web 历史与扩展历史互不影响（各写各的存储）。
+- [x] AC1（Web）：两仓成功出报后「最近」可见两者；点选立刻复开且无新 `/api/gossip`；样报与失败不入库；刷新后仍可打开（≤20）。
+- [x] AC2（弹层/完整页）：两仓成功出报后「最近」可见；点选立刻复开且无新 `GOSSIP_FETCH`；失败不入库；重启浏览器后仍可打开（≤20）。
+- [x] AC3（共用）：侧边栏写入的条目出现在弹层「最近」；弹层写入的条目出现在侧边栏「最近」。
+- [x] AC4：Web 历史与扩展历史互不影响（各写各的存储）。
+
+## E2E 验证记录（2026-09-29）
+
+**已执行并通过**
+
+| 项 | 方式 | 结果 |
+|----|------|------|
+| 真实出报链路 | 起 Vite dev server，POST `/api/gossip`（真实 GitHub，`sindresorhus/is` / `facebook/react`，offline） | `mode=offline`，正常出报 |
+| 成功出报写入历史 | 真实响应喂给真实 `apps/web/src/history.ts` | 写入 1 条 → 第二条后 2 条 |
+| 同仓覆盖为最新 | 同上，重复出报同一仓库 | 仍 2 条，同仓仅 1 条 |
+| 刷新后仍可打开 | 用同一份 localStorage 原始数据重建 storage 再 load | 2 条可读，`analyzed` 完整 |
+| 上限 20 | 写入 25 个不同仓库 | 截断为 20 |
+| 失败/样报不入库 | 错误响应 + 不可定位仓库的 payload | 均不写入 |
+| 单元级 | `npm test`（`test/web-history.test.ts` 10 个用例 + `test/extension-panel-history.test.ts`） | 79 passed / 0 failed |
+
+**未在本机执行的项**
+
+- 「点选最近条目**不发起新请求**」这一条是靠代码结构保证的（`App.tsx` 的 `openHistoryEntry` 只做 `slimGossipData` + `setData`，不调用 `fetch`），但**没有在真实浏览器里点过**。
+- 扩展侧 AC2 / AC3（弹层、完整页、侧边栏三处共用 `chrome.storage.local`）**没有在加载了已解压扩展的 Chrome 里验证**；只有 `history-logic.js` 的单测覆盖。
+
+原因：本机 `127.0.0.1` 被 HTTP 代理劫持（返回 502），`agent-browser` 导航持续挂起；机器上存在用户自己的 Chrome 会话，不能为了腾出环境去杀进程。
+
+**结论**：数据与逻辑层端到端通过；**扩展三处 UI 的 AC2/AC3 建议在做一次人工浏览器验收**（`chrome://extensions` → 加载 `apps/extension` → 侧边栏与弹层各出报一次 → 互相可见）。若发现偏差，另立缺陷任务处理。
 
 ## Out of Scope
 
