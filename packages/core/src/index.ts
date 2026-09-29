@@ -43,7 +43,20 @@ export {
   isGithubRateLimitError,
   enrichGithubError,
 } from "./github-retry.js";
-export { generateTabloid, dramatizeLocally, normalizeTranslations } from "./llm.js";
+export {
+  generateTabloid,
+  dramatizeLocally,
+  normalizeTranslations,
+  normalizeRawJson,
+  safeParseTabloid,
+  DEFAULT_LLM_TIMEOUT_MS,
+} from "./llm.js";
+export type {
+  LlmConfig,
+  ChatFetch,
+  GenerateTabloidOptions,
+  ParsedTabloid,
+} from "./llm.js";
 
 export {
   consumeRateLimit,

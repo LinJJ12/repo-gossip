@@ -59,11 +59,15 @@ export async function runGossip(options: GossipOptions): Promise<{
   }
 
   const env = loadEnv(options.env);
-  const { tabloid, mode, llmError } = await generateTabloid(analyzed, {
-    apiKey: apiKey as string,
-    baseUrl: env.LLM_BASE_URL,
-    model: env.LLM_MODEL,
-  });
+  const { tabloid, mode, llmError } = await generateTabloid(
+    analyzed,
+    {
+      apiKey: apiKey as string,
+      baseUrl: env.LLM_BASE_URL,
+      model: env.LLM_MODEL,
+    },
+    { timeoutMs: env.LLM_TIMEOUT_MS },
+  );
 
   return {
     tabloid,
