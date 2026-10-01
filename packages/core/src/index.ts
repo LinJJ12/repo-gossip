@@ -57,6 +57,13 @@ export type {
 } from "./watermark.js";
 
 export {
+  formatBadgeSvg,
+  badgeErrorSvg,
+  resolveBadgeRepoParam,
+  badgeTextWidth,
+} from "./badge.js";
+
+export {
   extractByokEnv,
   extractWebhookCredential,
   decideWebhookAuth,

@@ -14,9 +14,9 @@
 
 ## Acceptance Criteria
 
-- [ ] 单测：SVG 输出包含分数与等级色；非法 repo 名 400；缓存命中不重复抓取（打桩断言）。
-- [ ] Vercel 本地（`vercel dev` 或 dev 中间件）冒烟：浏览器访问得到合法 SVG。
-- [ ] `npm test`、typecheck 全绿。
+- [x] 单测：SVG 输出包含分数与等级色；非法 repo 名 400；缓存命中不重复抓取（打桩断言）。
+- [x] Vercel 本地（`vercel dev` 或 dev 中间件）冒烟：浏览器访问得到合法 SVG。
+- [x] `npm test`、typecheck 全绿。
 
 ## Out of Scope
 

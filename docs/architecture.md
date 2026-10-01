@@ -43,6 +43,7 @@ repo URL → runScore（gossip.ts）
         置信度按 missing 扣减，下限 20；信用度 = 比例健全性检查扣分制）
      → formatScoreCard → { score, message, missing }
   入口：CLI --score · POST /api/gossip {mode:"score"} · Web「验金」
+  徽章：GET /api/badge/:owner/:repo.svg（缓存优先，任何失败输出灰色 N/A、HTTP 200）
   LLM 不参与评分（模板直出，防幻觉数字）。
 ```
 

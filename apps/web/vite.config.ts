@@ -142,9 +142,64 @@ function gossipApiPlugin(): Plugin {
   };
 }
 
+function badgeApiPlugin(): Plugin {
+  return {
+    name: "badge-api",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        // GET /api/badge/:owner/:repo.svg
+        const match = /^\/api\/badge\/([^/]+)\/([^/]+?)(?:\.svg)?$/.exec(
+          req.url?.split("?")[0] ?? "",
+        );
+        if (!match || req.method !== "GET") return next();
+
+        const [, owner, repo] = match;
+        try {
+          const [
+            { runScore },
+            { formatBadgeSvg, badgeErrorSvg, resolveBadgeRepoParam },
+          ] = await Promise.all([
+            server.ssrLoadModule(
+              path.resolve(repoRoot, "packages/core/src/gossip.ts"),
+            ),
+            server.ssrLoadModule(
+              path.resolve(repoRoot, "packages/core/src/badge.ts"),
+            ),
+          ]);
+
+          const repoRef = resolveBadgeRepoParam(owner, repo);
+          if (!repoRef) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ error: "invalid badge repo path" }));
+            return;
+          }
+
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+          try {
+            const { score } = await runScore({ repo: repoRef });
+            res.end(formatBadgeSvg(score));
+          } catch {
+            res.end(badgeErrorSvg());
+          }
+        } catch (err) {
+          res.statusCode = 500;
+          res.setHeader("Content-Type", "application/json");
+          res.end(
+            JSON.stringify({
+              error: err instanceof Error ? err.message : String(err),
+            }),
+          );
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig({
   root: path.resolve(root),
-  plugins: [react(), gossipApiPlugin()],
+  plugins: [react(), gossipApiPlugin(), badgeApiPlugin()],
   resolve: {
     alias: {
       "@repo-gossip/core/github-links": path.resolve(

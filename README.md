@@ -86,6 +86,12 @@ npm run gossip -- owner/repo --score   # 🧪 含金量检定（纯数据，不�
 
 `--score` 输出五维评分卡：总分（0-100）· 等级（足金/K金/镀金/掺水/贴纸）· 置信度 · 每个维度的证据行。评分基于 `repos.get`、`/stats/commit_activity`、贡献者、Search API 计数等 ≤13 次调用，单路失败自动降级并标注「缺失信号」。
 
+**README 徽章**：部署后把下面这行放进任意项目的 README，即可展示其实时含金量（失败时输出灰色 N/A，不破图）：
+
+```md
+![含金量](https://<你的部署域名>/api/badge/<owner>/<repo>.svg)
+```
+
 ### Chrome 扩展
 
 开源 MV3，**不上架应用商店**——用「加载已解压的扩展程序」安装。
