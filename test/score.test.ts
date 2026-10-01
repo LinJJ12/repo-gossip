@@ -263,6 +263,15 @@ describe("computeRepoScore", () => {
     );
   });
 
+  it("空仓库(weeklyCommits=[]):活跃度按 0 计,而非当作缺失重分配", () => {
+    const score = computeRepoScore(
+      richInput({ weeklyCommits: [], mergedPrs90d: 0, releases90d: 0 }),
+    );
+    const act = score.dimensions.find((d) => d.id === "activity");
+    assert.ok(act?.score !== null, "activity 不应为 null");
+    assert.equal(Math.round(act?.score ?? -1), 0);
+  });
+
   it("archived 仓库仍可评分(不硬性扣分,由活跃度自然反映)", () => {
     const score = computeRepoScore(richInput({ archived: true }));
     assert.ok(score.total !== null);

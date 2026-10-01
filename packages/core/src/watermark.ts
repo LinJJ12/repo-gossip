@@ -60,8 +60,11 @@ export function starSeriesByDay(
 
 /**
  * 突发检测:
- * - 单日 ≥ max(BURST_DAY_ABS_MIN, 均值 + 3σ) → high
- * - 连续 ≤3 天合计 ≥ max(BURST_WINDOW_ABS_MIN, 均值 + 3σ) 且无单日 high → medium
+ * - 单日 ≥ max(BURST_DAY_ABS_MIN, 中位数×5, 中位数+3σ) → high
+ * - 连续 ≤3 天、日均 ≥ max(BURST_WINDOW_ABS_MIN/3, 中位数×5, 中位数+3σ) → medium
+ *
+ * 基线锚定在**中位数**(对突发值稳健):平稳的高增速序列(如刚被社区发现的
+ * 仓库,每天稳定 +30 star)不会触发误报;只有与自身基线明显脱节的窗口才判定。
  * 观测不足(< MIN_SERIES_DAYS 天)不判定。
  */
 export function detectStarBursts(starredAt: string[]): StarBurst[] | null {
@@ -69,13 +72,13 @@ export function detectStarBursts(starredAt: string[]): StarBurst[] | null {
   if (series === null || series.length < MIN_SERIES_DAYS) return null;
 
   const counts = series.map((s) => s.count);
+  const median = medianOf(counts);
   const mean = counts.reduce((s, n) => s + n, 0) / counts.length;
-  const variance =
-    counts.reduce((s, n) => s + (n - mean) ** 2, 0) / counts.length;
+  const variance = counts.reduce((s, n) => s + (n - mean) ** 2, 0) / counts.length;
   const sigma = Math.sqrt(variance);
-  const baseline = mean + 3 * sigma;
-  const dayThreshold = Math.max(BURST_DAY_ABS_MIN, baseline);
-  const windowThreshold = Math.max(BURST_WINDOW_ABS_MIN, baseline);
+  const anchored = Math.max(median * 5, median + 3 * sigma);
+  const dayThreshold = Math.max(BURST_DAY_ABS_MIN, anchored);
+  const windowAvgThreshold = Math.max(BURST_WINDOW_ABS_MIN / 3, anchored);
 
   const bursts: StarBurst[] = [];
   for (const s of series) {
@@ -90,7 +93,12 @@ export function detectStarBursts(starredAt: string[]): StarBurst[] | null {
   while (i < series.length) {
     const window = series.slice(i, Math.min(i + 3, series.length));
     const sum = window.reduce((s, w) => s + w.count, 0);
-    if (sum >= windowThreshold && window.length >= 2) {
+    const windowAvg = sum / window.length;
+    if (
+      window.length >= 2 &&
+      windowAvg >= windowAvgThreshold &&
+      sum >= BURST_WINDOW_ABS_MIN
+    ) {
       bursts.push({
         start: window[0]!.day,
         end: window[window.length - 1]!.day,
@@ -103,6 +111,15 @@ export function detectStarBursts(starredAt: string[]): StarBurst[] | null {
     }
   }
   return bursts;
+}
+
+function medianOf(xs: number[]): number {
+  if (xs.length === 0) return 0;
+  const sorted = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[mid]!
+    : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
 /** 信用度 sanity 检查命中数(warn/fail),由 score.ts 传入。 */

@@ -7,7 +7,7 @@ import {
   buildGossipCacheKey,
   getGossipCache,
   setGossipCache,
-} from "../../packages/core/src/index.js";
+} from "../../../packages/core/src/index.js";
 
 /**
  * GET /api/badge/:owner/:repo.svg

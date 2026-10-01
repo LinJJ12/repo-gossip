@@ -58,6 +58,15 @@ describe("detectStarBursts", () => {
     assert.equal(bursts?.[0]?.stars, 60);
   });
 
+  it("平稳高增速(如刚被社区发现的仓库)不误报", () => {
+    // 13 天每天 30 star:与自身基线无脱节,不应判为突发
+    const starredAt: string[] = [];
+    for (let d = 0; d < 13; d++) {
+      for (let k = 0; k < 30; k++) starredAt.push(daysAgo(d));
+    }
+    assert.deepEqual(detectStarBursts(starredAt), []);
+  });
+
   it("连续 3 天堆量(无单日尖峰)→ medium", () => {
     const starredAt = [
       ...Array.from({ length: 26 }, (_, i) => daysAgo(4 + i)), // 每天 1 个,4~29 天前

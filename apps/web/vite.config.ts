@@ -80,9 +80,36 @@ function gossipApiPlugin(): Plugin {
           }
 
           if (!repo) {
+            // 与 api/gossip.ts 对齐:GET 无 repo = 健康检查(200 usage),POST 缺参 = 400。
+            res.statusCode = req.method === "GET" ? 200 : 400;
+            res.setHeader("Content-Type", "application/json");
+            res.end(
+              JSON.stringify(
+                req.method === "GET"
+                  ? {
+                      ok: true,
+                      usage:
+                        'GET /api/gossip?repo=owner/repo or POST {"repo":"owner/repo","format":"web"}',
+                    }
+                  : { error: "请提供 repo" },
+              ),
+            );
+            return;
+          }
+
+          // 与 api/gossip.ts 对齐:非法 repo 表达式 → 400(而非管线抛错后的 500)。
+          try {
+            (await server.ssrLoadModule(
+              path.resolve(repoRoot, "packages/core/src/config.ts"),
+            )).parseRepoRef(repo);
+          } catch (err) {
             res.statusCode = 400;
             res.setHeader("Content-Type", "application/json");
-            res.end(JSON.stringify({ error: "请提供 repo" }));
+            res.end(
+              JSON.stringify({
+                error: err instanceof Error ? err.message : String(err),
+              }),
+            );
             return;
           }
 

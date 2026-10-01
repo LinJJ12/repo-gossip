@@ -292,7 +292,8 @@ function buildInfluence(input: RepoScoreInput): ScoreDimension {
 function buildActivity(input: RepoScoreInput): ScoreDimension {
   const subs: SubScale[] = [];
 
-  if (input.weeklyCommits !== null && input.weeklyCommits.length >= 12) {
+  if (input.weeklyCommits !== null) {
+    // 204(空仓库)时为 []:avg=0 是真实数据,不该当作"缺失"重分配权重。
     const recent = input.weeklyCommits.slice(-12);
     const avg12 = avgOf(recent);
     subs.push({
@@ -418,7 +419,7 @@ function buildSanity(input: RepoScoreInput): {
   }
 
   const avg12 =
-    input.weeklyCommits !== null && input.weeklyCommits.length >= 12
+    input.weeklyCommits !== null
       ? avgOf(input.weeklyCommits.slice(-12))
       : null;
 
