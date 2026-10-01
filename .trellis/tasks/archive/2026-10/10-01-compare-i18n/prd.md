@@ -13,9 +13,9 @@
 
 ## Acceptance Criteria
 
-- [ ] 对比纯函数单测（多仓库聚合、缺失维度处理）；SVG 雷达快照断言。
-- [ ] en 文案单测覆盖所有输出键；zh 行为与现有快照一致（回归）。
-- [ ] `npm test`、typecheck 全绿；CLI/Web 冒烟。
+- [x] 对比纯函数单测（多仓库聚合、缺失维度处理）；SVG 雷达快照断言。
+- [x] en 文案单测覆盖所有输出键；zh 行为与现有快照一致（回归）。
+- [x] `npm test`、typecheck 全绿；CLI/Web 冒烟。
 
 ## Out of Scope
 
