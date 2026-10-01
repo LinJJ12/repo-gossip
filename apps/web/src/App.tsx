@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { TabloidView } from "./TabloidView";
 import { ScoreView } from "./ScoreView";
+import { CompareView } from "./CompareView";
 import {
   formatSavedAt,
   loadHistoryFromStorage,
@@ -9,7 +10,12 @@ import {
   upsertHistoryInStorage,
 } from "./history";
 import { SAMPLE_TABLOID } from "./sample";
-import type { GossipMode, ScorePayload, TabloidPayload } from "./types";
+import type {
+  ComparePayload,
+  GossipMode,
+  ScorePayload,
+  TabloidPayload,
+} from "./types";
 
 const EXAMPLES = ["sindresorhus/is", "facebook/react", "vercel/next.js"];
 
@@ -34,6 +40,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<TabloidPayload | null>(SAMPLE_TABLOID);
   const [scoreData, setScoreData] = useState<ScorePayload | null>(null);
+  const [compareData, setCompareData] = useState<ComparePayload | null>(null);
   const [isSample, setIsSample] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>(() =>
@@ -52,6 +59,9 @@ export function App() {
     setHistoryOpen(false);
     try {
       const isScore = intent === "score";
+      // 验金模式下输入 2-4 个仓库(逗号/空白分隔)→ 对比模式
+      const multiRepos =
+        isScore && /[,，\s]+/.test(trimmed) ? trimmed.split(/[,，\s]+/).filter(Boolean) : null;
       const res = await fetch("/api/gossip", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -59,18 +69,25 @@ export function App() {
           repo: trimmed,
           offline: !useLlm,
           days,
-          ...(isScore ? { mode: "score" } : {}),
+          ...(isScore && multiRepos ? { mode: "compare", repos: multiRepos } : {}),
+          ...(isScore && !multiRepos ? { mode: "score" } : {}),
         }),
       });
       const json = (await res.json()) as
         | (TabloidPayload & { error?: string; kind?: string })
-        | (ScorePayload & { error?: string });
+        | (ScorePayload & { error?: string })
+        | (ComparePayload & { error?: string });
       if (!res.ok) throw new Error((json as { error?: string }).error || "请求失败");
-      if (isScore) {
+      if (isScore && (json as { kind?: string }).kind === "compare") {
+        setCompareData(json as ComparePayload);
+        setScoreData(null);
+        setRepo(trimmed);
+      } else if (isScore) {
         if ((json as { kind?: string }).kind !== "score") {
           throw new Error("评分响应格式异常");
         }
         setScoreData(json as ScorePayload);
+        setCompareData(null);
         setRepo(trimmed);
       } else {
         setData(json as TabloidPayload);
@@ -300,7 +317,13 @@ export function App() {
           </div>
         )}
 
-        {!loading && intent === "score" && scoreData && (
+        {!loading && intent === "score" && compareData && (
+          <>
+            <CompareView data={compareData} />
+          </>
+        )}
+
+        {!loading && intent === "score" && !compareData && scoreData && (
           <>
             {scoreData.missing.length > 0 && (
               <p className="sample-banner warn-banner">
@@ -311,9 +334,13 @@ export function App() {
           </>
         )}
 
-        {!loading && intent === "score" && !scoreData && (
+        {!loading && intent === "score" && !compareData && !scoreData && (
           <div className="loading-panel score-empty" role="note">
-            <p>丢一个仓库链接,点「验金」——五维含金量检定报告马上出炉。</p>
+            <p>
+              丢一个仓库链接,点「验金」——五维含金量检定报告马上出炉。
+              <br />
+              也可以一次填 2-4 个仓库(逗号分隔)进行对比。
+            </p>
           </div>
         )}
 

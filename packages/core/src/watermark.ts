@@ -7,6 +7,8 @@
  * 时序突发检测 + 与 P0 比例检查的合成,不做账号级指控。
  */
 
+import type { ScoreLocale } from "./types.js";
+
 export type StarBurst = {
   /** ISO 日期(UTC 天) */
   start: string;
@@ -30,6 +32,20 @@ export const WATERMARK_LEVEL_LABEL: Record<WatermarkLevel, string> = {
   suspicious: "存疑",
   "high-risk": "高危",
 };
+
+const LEVEL_LABEL_EN: Record<WatermarkLevel, string> = {
+  clean: "clean",
+  suspicious: "suspicious",
+  "high-risk": "high-risk",
+};
+
+/** 含水量分级标签(zh 默认)。 */
+export function watermarkLevelLabel(
+  level: WatermarkLevel,
+  locale: ScoreLocale = "zh",
+): string {
+  return locale === "en" ? LEVEL_LABEL_EN[level] : WATERMARK_LEVEL_LABEL[level];
+}
 
 /** 单日 burst 的绝对下限:低于此量的尖峰可能只是聚合效应。 */
 const BURST_DAY_ABS_MIN = 40;
@@ -122,34 +138,60 @@ function medianOf(xs: number[]): number {
     : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
-/** 信用度 sanity 检查命中数(warn/fail),由 score.ts 传入。 */
+/**
+ * 信用度 sanity 检查命中数(warn/fail),由 score.ts 传入。
+ * locale 决定 notes 语言;zh 字符串与历史输出保持字节级一致。
+ */
 export function estimateWatermark(
   bursts: StarBurst[] | null,
   sanityWarns: number,
   sanityFails: number,
   timelineStatus: "covered" | "skipped" | "failed",
+  locale: ScoreLocale = "zh",
 ): Watermark {
   const notes: string[] = [];
   let percent = 0;
 
   if (bursts === null) {
-    notes.push(
-      timelineStatus === "skipped"
-        ? "star 时间线未抓取(低星仓库,无刷量价值)"
-        : timelineStatus === "failed"
-          ? "star 时间线暂不可用(接口受限或需认证),仅按比例信号估计"
-          : "star 时间线覆盖不足,无法做突发检测",
-    );
+    if (locale === "en") {
+      notes.push(
+        timelineStatus === "skipped"
+          ? "star timeline not fetched (low-star repo)"
+          : timelineStatus === "failed"
+            ? "star timeline unavailable (endpoint restricted or auth required); ratio signals only"
+            : "star timeline coverage too short for burst detection",
+      );
+    } else {
+      notes.push(
+        timelineStatus === "skipped"
+          ? "star 时间线未抓取(低星仓库,无刷量价值)"
+          : timelineStatus === "failed"
+            ? "star 时间线暂不可用(接口受限或需认证),仅按比例信号估计"
+            : "star 时间线覆盖不足,无法做突发检测",
+      );
+    }
   } else if (bursts.length === 0) {
-    notes.push("star 时间线平稳,未见突发窗口");
+    notes.push(
+      locale === "en"
+        ? "star timeline steady; no burst window"
+        : "star 时间线平稳,未见突发窗口",
+    );
   } else {
     for (const b of bursts.slice(0, 3)) {
       if (b.level === "high") {
         percent += 30;
-        notes.push(`疑似刷量窗口 ${b.start}:单日 +${b.stars} star`);
+        notes.push(
+          locale === "en"
+            ? `suspected burst ${b.start}: +${b.stars} stars in one day`
+            : `疑似刷量窗口 ${b.start}:单日 +${b.stars} star`,
+        );
       } else {
         percent += 18;
-        notes.push(`疑似堆量窗口 ${b.start} ~ ${b.end}:3 天 +${b.stars} star`);
+        notes.push(
+          locale === "en"
+            ? `suspected spike ${b.start} ~ ${b.end}: +${b.stars} stars in 3 days`
+            : `疑似堆量窗口 ${b.start} ~ ${b.end}:3 天 +${b.stars} star`,
+        );
       }
     }
   }

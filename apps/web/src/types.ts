@@ -90,3 +90,13 @@ export type ScorePayload = {
     scoredAt: string;
   };
 };
+
+export type ComparePayload = {
+  kind: "compare";
+  message: { markdown: string; plain: string };
+  entries: {
+    repo: string;
+    score: ScorePayload["score"] | null;
+    error?: string;
+  }[];
+};

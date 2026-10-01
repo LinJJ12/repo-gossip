@@ -1,11 +1,15 @@
 import type { RepoScore } from "./score.js";
+import type { ScoreLocale } from "./types.js";
 
 /**
  * 含金量徽章:shields.io 风格的双段 SVG,零依赖,可直接嵌入 README。
  * 纯函数 —— 抓取/缓存在适配层(api/badge)完成。
  */
 
-const GRADE_COLORS: Record<string, string> = {
+const BADGE_LABEL: Record<ScoreLocale, string> = { zh: "含金量", en: "Gold" };
+
+/** 等级 → SVG 填色(徽章与雷达图共用)。 */
+export const GRADE_COLORS: Record<string, string> = {
   gold: "#d4a017",
   silver: "#8c96a5",
   bronze: "#a9683b",
@@ -49,19 +53,20 @@ function render(label: string, value: string, valueColor: string): string {
 }
 
 /** 评分徽章;无法评分(total null)时右侧为灰色 N/A。 */
-export function formatBadgeSvg(score: RepoScore): string {
+export function formatBadgeSvg(score: RepoScore, locale: ScoreLocale = "zh"): string {
+  const label = BADGE_LABEL[locale]!;
   if (score.total === null) {
-    return render("含金量", "N/A", COLOR_NA);
+    return render(label, "N/A", COLOR_NA);
   }
   const grade = score.grade;
   const value = grade ? `${score.total} ${grade.label}` : String(score.total);
   const color = grade ? GRADE_COLORS[grade.id] ?? COLOR_NA : COLOR_NA;
-  return render("含金量", value, color);
+  return render(label, value, color);
 }
 
 /** 任何错误都输出合法的灰色 N/A 徽章(README 上永远不破图)。 */
-export function badgeErrorSvg(): string {
-  return render("含金量", "N/A", COLOR_NA);
+export function badgeErrorSvg(locale: ScoreLocale = "zh"): string {
+  return render(BADGE_LABEL[locale]!, "N/A", COLOR_NA);
 }
 
 /**

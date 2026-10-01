@@ -82,11 +82,14 @@ npm run gossip -- owner/repo
 npm run gossip -- https://github.com/owner/repo --days 14
 npm run gossip -- owner/repo --offline
 npm run gossip -- owner/repo --score   # 🧪 含金量检定（纯数据，不调 LLM）
+npm run gossip -- owner/a owner/b --compare   # ⚖️ 2-4 个仓库对比（可加 --lang en）
 ```
 
 `--score` 输出五维评分卡：总分（0-100）· 等级（足金/K金/镀金/掺水/贴纸）· 置信度 · 每个维度的证据行，并给出**含水量估计**（star 时间线突发检测 + 比例异常，只报告统计模式，不指控账号）。评分基于 `repos.get`、`/stats/commit_activity`、贡献者、Search API 计数等 **11 次**调用（star ≥ 500 的仓库加抓 stargazer 时间线，最多 +4 次），单路失败自动降级并标注「缺失信号」。
 
-**README 徽章**：部署后把下面这行放进任意项目的 README，即可展示其实时含金量（失败时输出灰色 N/A，不破图）：
+`--compare` 把 2-4 个仓库并排成一张分项对照表（总分/五维/置信度/含水量），口径完全一致；单个仓库失败呈现为 N/A 列，不拖垮整表。`--lang en` 切换评分/对比/徽章文案为英文（默认中文）。
+
+**README 徽章**：部署后把下面这行放进任意项目的 README，即可展示其实时含金量（失败时输出灰色 N/A，不破图；加 `?lang=en` 显示英文）：
 
 ```md
 ![含金量](https://<你的部署域名>/api/badge/<owner>/<repo>.svg)
@@ -151,7 +154,9 @@ curl -X POST https://<domain>/api/gossip \
 | `format` | `web`（默认）· `markdown` · `json` · `discord` · `feishu` |
 | `days` | 1–90 |
 | `offline` | `true` 时不调 LLM |
-| `mode` | `score` 时返回含金量评分卡 `{kind:"score", score, message, missing}` |
+| `mode` | `score` 返回含金量评分卡 `{kind:"score", score, message, missing}`；`compare` 返回多仓库对比 `{kind:"compare", entries, message}` |
+| `repos` | `mode:"compare"` 时的仓库数组（2–4 个），也可用 `repo` 逗号分隔 |
+| `lang` | `en` 切换评分/对比文案为英文（默认 `zh`） |
 
 可选 **BYOK** 请求头（优先于服务端环境变量，不落日志 / 响应体）：
 

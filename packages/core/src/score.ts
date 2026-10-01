@@ -1,8 +1,8 @@
-import type { PlatformMessage, RepoRef } from "./types.js";
+import type { PlatformMessage, RepoRef, ScoreLocale } from "./types.js";
 import {
   detectStarBursts,
   estimateWatermark,
-  WATERMARK_LEVEL_LABEL,
+  watermarkLevelLabel,
   type Watermark,
 } from "./watermark.js";
 
@@ -108,13 +108,21 @@ export const SCORE_DIMENSION_WEIGHTS: Record<ScoreDimensionId, number> = {
   credibility: 0.2,
 };
 
-const DIMENSION_META: Record<ScoreDimensionId, { label: string; emoji: string }> = {
-  influence: { label: "影响力", emoji: "🧲" },
-  activity: { label: "活跃度", emoji: "🔥" },
-  community: { label: "社区", emoji: "👥" },
-  engineering: { label: "工程", emoji: "🔧" },
-  credibility: { label: "信用度", emoji: "🧪" },
+const DIMENSION_META: Record<
+  ScoreDimensionId,
+  { zh: string; en: string; emoji: string }
+> = {
+  influence: { zh: "影响力", en: "Influence", emoji: "🧲" },
+  activity: { zh: "活跃度", en: "Activity", emoji: "🔥" },
+  community: { zh: "社区", en: "Community", emoji: "👥" },
+  engineering: { zh: "工程", en: "Engineering", emoji: "🔧" },
+  credibility: { zh: "信用度", en: "Credibility", emoji: "🧪" },
 };
+
+function dimensionMeta(id: ScoreDimensionId, locale: ScoreLocale) {
+  const m = DIMENSION_META[id]!;
+  return { label: locale === "en" ? m.en : m.zh, emoji: m.emoji };
+}
 
 const CONFIDENCE_PENALTY: Record<string, number> = {
   weeklyCommits: 15,
@@ -132,6 +140,69 @@ const SANITY_PENALTY: Record<Exclude<SanityLevel, "ok" | "unknown">, number> = {
   warn: 15,
   fail: 35,
 };
+
+// ---------------------------------------------------------------------------
+// i18n 文案字典:zh 与历史输出字节级一致;en 仅在显式选择 locale 时使用。
+// ---------------------------------------------------------------------------
+
+type Bi = { zh: string; en: string };
+
+function tx(s: Bi, locale: ScoreLocale): string {
+  return locale === "en" ? s.en : s.zh;
+}
+
+/** 纯标签类文案;带数字/语序差异的详情串在调用点内联双语。 */
+const STR = {
+  reportTitle: { zh: "含金量报告", en: "Gold Report" },
+  unscoreable: { zh: "无法评分", en: "unscoreable" },
+  confidence: { zh: "置信度", en: "confidence" },
+  confHigh: { zh: "充分", en: "solid" },
+  confMid: { zh: "尚可", en: "fair" },
+  confLow: { zh: "不足", en: "thin" },
+  sanityTitle: { zh: "健全性警示", en: "Sanity warnings" },
+  watermarkEstimate: { zh: "含水量估计", en: "watermark" },
+  watermarkLine: { zh: "含水量", en: "watermark" },
+  allChecksPass: { zh: "各项比例检查均通过", en: "all ratio checks passed" },
+  footer: {
+    zh: "*含金量基于 GitHub 公开数据的可解释模型;含水量为比例+时间线信号的统计估计,不构成对任何账号的指控。*",
+    en: "*The purity score is an explainable model over public GitHub data; the watermark is a statistical estimate from ratio + timeline signals, not an accusation of any account.*",
+  },
+  dimInfluence: { zh: "影响力", en: "Influence" },
+  dimActivity: { zh: "活跃度", en: "Activity" },
+  dimCommunity: { zh: "社区", en: "Community" },
+  dimEngineering: { zh: "工程", en: "Engineering" },
+  dimCredibility: { zh: "信用度", en: "Credibility" },
+  gradeGold: { zh: "足金", en: "Solid Gold" },
+  gradeSilver: { zh: "K金", en: "Alloyed" },
+  gradeBronze: { zh: "镀金", en: "Plated" },
+  gradeGilded: { zh: "掺水", en: "Watered" },
+  gradeTinfoil: { zh: "贴纸", en: "Foil" },
+  avgCommits: { zh: "周均 commit", en: "avg commits/wk" },
+  momentum: { zh: "动能", en: "momentum" },
+  momentumRange: { zh: "近4周/前8周", en: "last4/prior8" },
+  momentumIdle: { zh: "前8周无提交", en: "prior 8w idle" },
+  mergedPrs90: { zh: "90 天合并 PR", en: "PRs merged (90d)" },
+  releases90: { zh: "90 天发版", en: "releases (90d)" },
+  contributors: { zh: "贡献者", en: "contributors" },
+  busFactorHint: {
+    zh: "覆盖 50% 贡献所需人数",
+    en: "people covering 50% contributions",
+  },
+  issueCloseRate: { zh: "issue 季度关闭率", en: "issue close rate (90d)" },
+  freshPush: { zh: "30天内推送", en: "pushed ≤30d" },
+  chkEngagement: { zh: "star 互动比", en: "star engagement" },
+  chkStarContrib: { zh: "star/贡献者", en: "star/contributors" },
+  chkHighLow: { zh: "高星低活", en: "high stars, low activity" },
+  engNa: { zh: "star 较少,比例检查不适用", en: "too few stars for ratio check" },
+  scOk: { zh: "贡献者规模与 star 相称", en: "contributor scale matches stars" },
+  scNa: {
+    zh: "贡献者数据缺失或 star 不足 1k",
+    en: "contributor data missing or stars < 1k",
+  },
+  hlOk: { zh: "活跃度与 star 相称", en: "activity matches stars" },
+  hlNa: { zh: "commit 活跃度数据缺失", en: "commit activity data missing" },
+  fsNa: { zh: "star 不足 500,不适用", en: "stars < 500, n/a" },
+} as const satisfies Record<string, Bi>;
 
 // ---------------------------------------------------------------------------
 // 数值工具(导出以便单测)
@@ -209,15 +280,19 @@ export function momentumOf(weeklyCommits: number[]): Momentum | null {
 
 export function gradeFor(
   total: number,
+  locale: ScoreLocale = "zh",
 ): { id: ScoreGradeId; label: string; emoji: string } {
-  if (total >= 85) return { id: "gold", label: "足金", emoji: "🥇" };
-  if (total >= 70) return { id: "silver", label: "K金", emoji: "🥈" };
-  if (total >= 55) return { id: "bronze", label: "镀金", emoji: "🥉" };
-  if (total >= 40) return { id: "gilded", label: "掺水", emoji: "⚠️" };
-  return { id: "tinfoil", label: "贴纸", emoji: "🧻" };
+  if (total >= 85) return { id: "gold", label: tx(STR.gradeGold, locale), emoji: "🥇" };
+  if (total >= 70) return { id: "silver", label: tx(STR.gradeSilver, locale), emoji: "🥈" };
+  if (total >= 55) return { id: "bronze", label: tx(STR.gradeBronze, locale), emoji: "🥉" };
+  if (total >= 40) return { id: "gilded", label: tx(STR.gradeGilded, locale), emoji: "⚠️" };
+  return { id: "tinfoil", label: tx(STR.gradeTinfoil, locale), emoji: "🧻" };
 }
 
-export function confidenceFromMissing(missing: string[]): {
+export function confidenceFromMissing(
+  missing: string[],
+  locale: ScoreLocale = "zh",
+): {
   value: number;
   label: string;
 } {
@@ -226,7 +301,12 @@ export function confidenceFromMissing(missing: string[]): {
     value -= CONFIDENCE_PENALTY[id] ?? 0;
   }
   value = Math.max(20, value);
-  const label = value >= 80 ? "充分" : value >= 55 ? "尚可" : "不足";
+  const label =
+    value >= 80
+      ? tx(STR.confHigh, locale)
+      : value >= 55
+        ? tx(STR.confMid, locale)
+        : tx(STR.confLow, locale);
   return { value, label };
 }
 
@@ -259,7 +339,7 @@ function avgOf(xs: number[]): number {
   return xs.reduce((s, n) => s + n, 0) / xs.length;
 }
 
-function buildInfluence(input: RepoScoreInput): ScoreDimension {
+function buildInfluence(input: RepoScoreInput, locale: ScoreLocale): ScoreDimension {
   const subs: SubScale[] = [];
 
   subs.push({
@@ -286,10 +366,10 @@ function buildInfluence(input: RepoScoreInput): ScoreDimension {
   }
 
   const { score, lines } = combineSubscales(subs);
-  return { id: "influence", ...DIMENSION_META.influence, weight: SCORE_DIMENSION_WEIGHTS.influence, score, lines };
+  return { id: "influence", ...dimensionMeta("influence", locale), weight: SCORE_DIMENSION_WEIGHTS.influence, score, lines };
 }
 
-function buildActivity(input: RepoScoreInput): ScoreDimension {
+function buildActivity(input: RepoScoreInput, locale: ScoreLocale): ScoreDimension {
   const subs: SubScale[] = [];
 
   if (input.weeklyCommits !== null) {
@@ -299,14 +379,19 @@ function buildActivity(input: RepoScoreInput): ScoreDimension {
     subs.push({
       weight: 0.4,
       score: ratioScale(avg12, 60),
-      line: `周均 commit ${round1(avg12)}`,
+      line: `${tx(STR.avgCommits, locale)} ${round1(avg12)}`,
     });
     const m = momentumOf(input.weeklyCommits);
     if (m) {
+      const range = `${tx(STR.momentumRange, locale)}${
+        m.ratio !== null
+          ? ` ${round2(m.ratio)}×`
+          : `,${locale === "en" ? " " : ""}${tx(STR.momentumIdle, locale)}`
+      }`;
       subs.push({
         weight: 0.2,
         score: m.score,
-        line: `动能 ${m.arrow}(近4周/前8周${m.ratio !== null ? ` ${round2(m.ratio)}×` : ",前8周无提交"})`,
+        line: `${tx(STR.momentum, locale)} ${m.arrow}(${range})`,
       });
     }
   }
@@ -315,7 +400,7 @@ function buildActivity(input: RepoScoreInput): ScoreDimension {
     subs.push({
       weight: 0.25,
       score: logScale(input.mergedPrs90d, 500),
-      line: `90 天合并 PR ${formatCompact(input.mergedPrs90d)}`,
+      line: `${tx(STR.mergedPrs90, locale)} ${formatCompact(input.mergedPrs90d)}`,
     });
   }
 
@@ -323,15 +408,15 @@ function buildActivity(input: RepoScoreInput): ScoreDimension {
     subs.push({
       weight: 0.15,
       score: ratioScale(input.releases90d, 6),
-      line: `90 天发版 ${input.releases90d}`,
+      line: `${tx(STR.releases90, locale)} ${input.releases90d}`,
     });
   }
 
   const { score, lines } = combineSubscales(subs);
-  return { id: "activity", ...DIMENSION_META.activity, weight: SCORE_DIMENSION_WEIGHTS.activity, score, lines };
+  return { id: "activity", ...dimensionMeta("activity", locale), weight: SCORE_DIMENSION_WEIGHTS.activity, score, lines };
 }
 
-function buildCommunity(input: RepoScoreInput): ScoreDimension {
+function buildCommunity(input: RepoScoreInput, locale: ScoreLocale): ScoreDimension {
   const subs: SubScale[] = [];
 
   if (input.contributors !== null) {
@@ -340,7 +425,7 @@ function buildCommunity(input: RepoScoreInput): ScoreDimension {
     subs.push({
       weight: 0.4,
       score: logScale(count, 120),
-      line: `贡献者 ${countLabel}`,
+      line: `${tx(STR.contributors, locale)} ${countLabel}`,
     });
     const bf = busFactorOf(input.contributors);
     if (bf !== null) {
@@ -349,7 +434,7 @@ function buildCommunity(input: RepoScoreInput): ScoreDimension {
       subs.push({
         weight: 0.35,
         score,
-        line: `Bus Factor ${bf}${flag}(覆盖 50% 贡献所需人数)`,
+        line: `Bus Factor ${bf}${flag}(${tx(STR.busFactorHint, locale)})`,
       });
     }
   }
@@ -360,22 +445,22 @@ function buildCommunity(input: RepoScoreInput): ScoreDimension {
     subs.push({
       weight: 0.25,
       score: ratioScale(throughput, 0.5),
-      line: `issue 季度关闭率 ${Math.round(throughput * 100)}%`,
+      line: `${tx(STR.issueCloseRate, locale)} ${Math.round(throughput * 100)}%`,
     });
   }
 
   const { score, lines } = combineSubscales(subs);
-  return { id: "community", ...DIMENSION_META.community, weight: SCORE_DIMENSION_WEIGHTS.community, score, lines };
+  return { id: "community", ...dimensionMeta("community", locale), weight: SCORE_DIMENSION_WEIGHTS.community, score, lines };
 }
 
-function buildEngineering(input: RepoScoreInput): ScoreDimension {
+function buildEngineering(input: RepoScoreInput, locale: ScoreLocale): ScoreDimension {
   const items: { id: string; label: string; weight: number; present: boolean | null }[] = [
     { id: "license", label: "license", weight: 0.25, present: licensePresent(input.licenseSpdx) },
     { id: "readme", label: "README", weight: 0.2, present: input.hasReadme },
     { id: "ci", label: "CI", weight: 0.2, present: input.hasCi },
     { id: "contributing", label: "CONTRIBUTING", weight: 0.1, present: input.hasContributing },
     { id: "security", label: "SECURITY", weight: 0.1, present: input.hasSecurity },
-    { id: "fresh-push", label: "30天内推送", weight: 0.15, present: pushedWithinDays(input.pushedAt, 30) },
+    { id: "fresh-push", label: tx(STR.freshPush, locale), weight: 0.15, present: pushedWithinDays(input.pushedAt, 30) },
   ];
 
   const subs: SubScale[] = items.map((it) => ({
@@ -385,7 +470,7 @@ function buildEngineering(input: RepoScoreInput): ScoreDimension {
   }));
 
   const { score, lines } = combineSubscales(subs);
-  return { id: "engineering", ...DIMENSION_META.engineering, weight: SCORE_DIMENSION_WEIGHTS.engineering, score, lines };
+  return { id: "engineering", ...dimensionMeta("engineering", locale), weight: SCORE_DIMENSION_WEIGHTS.engineering, score, lines };
 }
 
 function licensePresent(spdx: string | null): boolean | null {
@@ -405,7 +490,10 @@ function pushedWithinDays(pushedAt: string | null, days: number): boolean | null
 // 信用度:比例健全性检查(扣分制)。P1 由 star 时间线突发检测增强。
 // ---------------------------------------------------------------------------
 
-function buildSanity(input: RepoScoreInput): {
+function buildSanity(
+  input: RepoScoreInput,
+  locale: ScoreLocale,
+): {
   dimension: ScoreDimension;
   checks: SanityCheck[];
   penalty: number;
@@ -423,59 +511,133 @@ function buildSanity(input: RepoScoreInput): {
       ? avgOf(input.weeklyCommits.slice(-12))
       : null;
 
+  const labelEngagement = tx(STR.chkEngagement, locale);
+  const labelStarContrib = tx(STR.chkStarContrib, locale);
+  const labelHighLow = tx(STR.chkHighLow, locale);
+
   // 1. star-engagement:star 高但 fork/issue/watcher 互动几乎为零。
   if (input.stars >= 300) {
     const engagement =
       (input.forks + (input.openIssuesTotal ?? 0) + (input.subscribers ?? 0)) /
       input.stars;
     if (engagement < 0.02) {
-      push("star-engagement", "star 互动比", "fail", `互动信号/star 仅 ${round3(engagement)}`);
+      push(
+        "star-engagement",
+        labelEngagement,
+        "fail",
+        locale === "en"
+          ? `engagement/star only ${round3(engagement)}`
+          : `互动信号/star 仅 ${round3(engagement)}`,
+      );
     } else if (engagement < 0.05) {
-      push("star-engagement", "star 互动比", "warn", `互动信号/star 偏低(${round3(engagement)})`);
+      push(
+        "star-engagement",
+        labelEngagement,
+        "warn",
+        locale === "en"
+          ? `engagement/star low (${round3(engagement)})`
+          : `互动信号/star 偏低(${round3(engagement)})`,
+      );
     } else {
-      push("star-engagement", "star 互动比", "ok", `互动信号/star ${round3(engagement)}`);
+      push(
+        "star-engagement",
+        labelEngagement,
+        "ok",
+        locale === "en"
+          ? `engagement/star ${round3(engagement)}`
+          : `互动信号/star ${round3(engagement)}`,
+      );
     }
   } else {
-    push("star-engagement", "star 互动比", "unknown", "star 较少,比例检查不适用");
+    push("star-engagement", labelEngagement, "unknown", tx(STR.engNa, locale));
   }
 
   // 2. star/贡献者比。
   if (input.contributors !== null && input.stars >= 1000) {
     const count = input.contributors.length;
     if (!input.contributorsTruncated && count <= 5) {
-      push("star-contributor", "star/贡献者", "fail", `${formatCompact(input.stars)} star 仅 ${count} 位贡献者`);
+      push(
+        "star-contributor",
+        labelStarContrib,
+        "fail",
+        locale === "en"
+          ? `${formatCompact(input.stars)} stars but only ${count} contributors`
+          : `${formatCompact(input.stars)} star 仅 ${count} 位贡献者`,
+      );
     } else if (!input.contributorsTruncated && count <= 10) {
-      push("star-contributor", "star/贡献者", "warn", `${formatCompact(input.stars)} star 仅 ${count} 位贡献者`);
+      push(
+        "star-contributor",
+        labelStarContrib,
+        "warn",
+        locale === "en"
+          ? `${formatCompact(input.stars)} stars but only ${count} contributors`
+          : `${formatCompact(input.stars)} star 仅 ${count} 位贡献者`,
+      );
     } else {
-      push("star-contributor", "star/贡献者", "ok", "贡献者规模与 star 相称");
+      push("star-contributor", labelStarContrib, "ok", tx(STR.scOk, locale));
     }
   } else {
-    push("star-contributor", "star/贡献者", "unknown", "贡献者数据缺失或 star 不足 1k");
+    push("star-contributor", labelStarContrib, "unknown", tx(STR.scNa, locale));
   }
 
   // 3. 高星低活。
   if (avg12 !== null && input.stars >= 2000 && avg12 < 1) {
-    push("high-star-low-activity", "高星低活", "fail", `star ≥ 2k 但周均 commit 仅 ${round2(avg12)}`);
+    push(
+      "high-star-low-activity",
+      labelHighLow,
+      "fail",
+      locale === "en"
+        ? `≥2k stars but only ${round2(avg12)} commits/wk`
+        : `star ≥ 2k 但周均 commit 仅 ${round2(avg12)}`,
+    );
   } else if (avg12 !== null && input.stars >= 1000 && avg12 < 0.5) {
-    push("high-star-low-activity", "高星低活", "warn", `star ≥ 1k 但周均 commit 仅 ${round2(avg12)}`);
+    push(
+      "high-star-low-activity",
+      labelHighLow,
+      "warn",
+      locale === "en"
+        ? `≥1k stars but only ${round2(avg12)} commits/wk`
+        : `star ≥ 1k 但周均 commit 仅 ${round2(avg12)}`,
+    );
   } else if (avg12 !== null) {
-    push("high-star-low-activity", "高星低活", "ok", "活跃度与 star 相称");
+    push("high-star-low-activity", labelHighLow, "ok", tx(STR.hlOk, locale));
   } else {
-    push("high-star-low-activity", "高星低活", "unknown", "commit 活跃度数据缺失");
+    push("high-star-low-activity", labelHighLow, "unknown", tx(STR.hlNa, locale));
   }
 
   // 4. fork/star 过低。
   if (input.stars >= 500) {
     const ratio = input.forks / input.stars;
     if (ratio < 0.003) {
-      push("fork-star", "fork/star", "fail", `fork/star 仅 ${round4(ratio)}`);
+      push(
+        "fork-star",
+        "fork/star",
+        "fail",
+        locale === "en"
+          ? `fork/star only ${round4(ratio)}`
+          : `fork/star 仅 ${round4(ratio)}`,
+      );
     } else if (ratio < 0.01) {
-      push("fork-star", "fork/star", "warn", `fork/star 偏低(${round4(ratio)})`);
+      push(
+        "fork-star",
+        "fork/star",
+        "warn",
+        locale === "en"
+          ? `fork/star low (${round4(ratio)})`
+          : `fork/star 偏低(${round4(ratio)})`,
+      );
     } else {
-      push("fork-star", "fork/star", "ok", `fork/star ${round3(ratio)}`);
+      push(
+        "fork-star",
+        "fork/star",
+        "ok",
+        locale === "en"
+          ? `fork/star ${round3(ratio)}`
+          : `fork/star ${round3(ratio)}`,
+      );
     }
   } else {
-    push("fork-star", "fork/star", "unknown", "star 不足 500,不适用");
+    push("fork-star", "fork/star", "unknown", tx(STR.fsNa, locale));
   }
 
   const evaluated = checks.filter((c) => c.level !== "unknown");
@@ -488,13 +650,13 @@ function buildSanity(input: RepoScoreInput): {
           (c) => `${c.level === "fail" ? "🚨" : "⚠️"} ${c.label}:${c.detail}`,
         )
       : evaluated.length > 0
-        ? ["各项比例检查均通过"]
+        ? [tx(STR.allChecksPass, locale)]
         : [];
 
   return {
     dimension: {
       id: "credibility",
-      ...DIMENSION_META.credibility,
+      ...dimensionMeta("credibility", locale),
       weight: SCORE_DIMENSION_WEIGHTS.credibility,
       score,
       lines,
@@ -508,8 +670,11 @@ function buildSanity(input: RepoScoreInput): {
 // 主入口
 // ---------------------------------------------------------------------------
 
-export function computeRepoScore(input: RepoScoreInput): RepoScore {
-  const { dimension: credibility, checks } = buildSanity(input);
+export function computeRepoScore(
+  input: RepoScoreInput,
+  locale: ScoreLocale = "zh",
+): RepoScore {
+  const { dimension: credibility, checks } = buildSanity(input, locale);
 
   // 含水量:时序突发 + 比例异常合成,非 clean 时按 60% 折算进信用度扣分。
   const seriesCovered = (input.starredAt?.length ?? 0) > 0;
@@ -526,6 +691,7 @@ export function computeRepoScore(input: RepoScoreInput): RepoScore {
     warnCount,
     failCount,
     timelineStatus,
+    locale,
   );
   if (watermark.level !== "clean") {
     credibility.score =
@@ -533,15 +699,15 @@ export function computeRepoScore(input: RepoScoreInput): RepoScore {
         ? null
         : Math.max(0, credibility.score - Math.round(watermark.percent * 0.6));
     credibility.lines.unshift(
-      `💧 含水量 ${watermark.percent}%(${WATERMARK_LEVEL_LABEL[watermark.level]})`,
+      `💧 ${tx(STR.watermarkLine, locale)} ${watermark.percent}%(${watermarkLevelLabel(watermark.level, locale)})`,
     );
   }
 
   const dims: ScoreDimension[] = [
-    buildInfluence(input),
-    buildActivity(input),
-    buildCommunity(input),
-    buildEngineering(input),
+    buildInfluence(input, locale),
+    buildActivity(input, locale),
+    buildCommunity(input, locale),
+    buildEngineering(input, locale),
     credibility,
   ];
 
@@ -566,8 +732,8 @@ export function computeRepoScore(input: RepoScoreInput): RepoScore {
     ref: input.ref,
     fullName: input.fullName,
     total,
-    grade: total === null ? null : gradeFor(total),
-    confidence: confidenceFromMissing(input.missing),
+    grade: total === null ? null : gradeFor(total, locale),
+    confidence: confidenceFromMissing(input.missing, locale),
     dimensions: dims,
     sanity: checks,
     watermark,
@@ -579,19 +745,30 @@ export function computeRepoScore(input: RepoScoreInput): RepoScore {
 // 排版
 // ---------------------------------------------------------------------------
 
-export function formatScoreCard(score: RepoScore): PlatformMessage {
+export function formatScoreCard(
+  score: RepoScore,
+  locale: ScoreLocale = "zh",
+): PlatformMessage {
   const lines: string[] = [];
   const totalText =
     score.total === null
-      ? "无法评分"
+      ? tx(STR.unscoreable, locale)
       : `${score.total} / 100`;
   const gradeText = score.grade ? ` · ${score.grade.label} ${score.grade.emoji}` : "";
+  const confLabel =
+    score.confidence.label === "充分"
+      ? tx(STR.confHigh, locale)
+      : score.confidence.label === "尚可"
+        ? tx(STR.confMid, locale)
+        : score.confidence.label === "不足"
+          ? tx(STR.confLow, locale)
+          : score.confidence.label;
 
-  lines.push(`🧪 **含金量报告 · ${score.fullName}**`);
-  lines.push(`🏅 **${totalText}${gradeText}** · 置信度 ${score.confidence.value}(${score.confidence.label})`);
+  lines.push(`🧪 **${tx(STR.reportTitle, locale)} · ${score.fullName}**`);
+  lines.push(`🏅 **${totalText}${gradeText}** · ${tx(STR.confidence, locale)} ${score.confidence.value}(${confLabel})`);
   if (score.watermark.level !== "clean") {
     lines.push(
-      `💧 含水量估计 ${score.watermark.percent}%(${WATERMARK_LEVEL_LABEL[score.watermark.level]})`,
+      `💧 ${tx(STR.watermarkEstimate, locale)} ${score.watermark.percent}%(${watermarkLevelLabel(score.watermark.level, locale)})`,
     );
   }
 
@@ -604,16 +781,14 @@ export function formatScoreCard(score: RepoScore): PlatformMessage {
   const flags = score.sanity.filter((c) => c.level === "warn" || c.level === "fail");
   if (flags.length > 0) {
     lines.push("");
-    lines.push("**健全性警示**");
+    lines.push(`**${tx(STR.sanityTitle, locale)}**`);
     for (const c of flags) {
       lines.push(`- ${c.level === "fail" ? "🚨" : "⚠️"} ${c.label}:${c.detail}`);
     }
   }
 
   lines.push("");
-  lines.push(
-    "*含金量基于 GitHub 公开数据的可解释模型;含水量为比例+时间线信号的统计估计,不构成对任何账号的指控。*",
-  );
+  lines.push(tx(STR.footer, locale));
 
   const markdown = lines.join("\n");
   const plain = markdown.replace(/\*\*/g, "").replace(/`/g, "");

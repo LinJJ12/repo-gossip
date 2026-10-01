@@ -44,9 +44,20 @@ repo URL → runScore（gossip.ts）
         置信度按 missing 扣减，下限 20；
         信用度 = 比例健全性检查 + 含水量（watermark.ts：star 时间线突发 + 比例异常，×0.6 折算扣分））
      → formatScoreCard → { score, message, missing }
-  入口：CLI --score · POST /api/gossip {mode:"score"} · Web「验金」
-  徽章：GET /api/badge/:owner/:repo.svg（缓存优先，任何失败输出灰色 N/A、HTTP 200）
+  入口：CLI --score · POST /api/gossip {mode:"score", lang?} · Web「验金」
+  徽章：GET /api/badge/:owner/:repo.svg（缓存优先，任何失败输出灰色 N/A、HTTP 200，?lang=en 英文）
   LLM 不参与评分（模板直出，防幻觉数字）。
+```
+
+### Compare pipeline（评分的多仓库版）
+
+```
+repos[2-4] → runCompare（gossip.ts）
+     → 逐仓库并行 fetchRepoScoreInput + computeRepoScore（口径一致；单个失败 → N/A 列，不拖垮整表）
+     → formatCompareTable（Markdown 对照表：总分/五维/置信度/含水量）
+     → formatCompareRadarSvg（五维雷达 SVG，等级配色，core 与 Web 各自渲染同一几何）
+  入口：CLI --compare（positionals 全为仓库，--lang en 切英文）
+        POST /api/gossip {mode:"compare", repos:[...], lang?} · Web 验金输入框逗号分隔多仓库
 ```
 
 ### Client-side history（不经服务端）

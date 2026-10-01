@@ -2,7 +2,8 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as loadDotenv } from "dotenv";
-import { runGossip, runScore } from "./gossip.js";
+import { runGossip, runScore, runCompare } from "./gossip.js";
+import type { ScoreLocale } from "./types.js";
 
 loadDotenv({
   path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../.env"),
@@ -13,11 +14,14 @@ function printHelp() {
 
 Usage:
   npm run gossip -- <owner/repo|github-url> [options]
+  npm run gossip -- <owner/repo> <owner/repo2> [--compare]   2-4 个仓库对比
 
 Options:
   --offline          skip LLM, use local templates
   --days <n>         lookback days (default 14)
   --score            含金量评分模式(输出评分卡,不调 LLM)
+  --compare          含金量对比模式(2-4 个仓库,全部 positional 视为仓库)
+  --lang <zh|en>     评分/对比输出语言(默认 zh)
   --json             print raw JSON
   -h, --help         help
 `);
@@ -30,8 +34,8 @@ function parseArgs(argv: string[]) {
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
-    if (a === "--days") {
-      kv.set("days", argv[++i] ?? "");
+    if (a === "--days" || a === "--lang") {
+      kv.set(a.slice(2), argv[++i] ?? "");
       continue;
     }
     if (a.startsWith("--")) {
@@ -62,10 +66,32 @@ async function main() {
   const offline = flags.has("--offline");
   const json = flags.has("--json");
   const score = flags.has("--score");
+  const compare = flags.has("--compare");
+  const langRaw = (kv.get("lang") ?? "").trim().toLowerCase();
+  const locale: ScoreLocale = langRaw === "en" ? "en" : "zh";
+
+  if (compare) {
+    console.error(`Comparing ${positionals.join(" vs ")}...`);
+    try {
+      const { entries, message } = await runCompare({
+        repos: positionals,
+        locale,
+      });
+      if (json) {
+        console.log(JSON.stringify(entries, null, 2));
+      } else {
+        console.log(message.markdown);
+      }
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
+    return;
+  }
 
   if (score) {
     console.error(`Scoring ${repo}...`);
-    const { score: repoScore, message, missing } = await runScore({ repo });
+    const { score: repoScore, message, missing } = await runScore({ repo, locale });
     if (missing.length > 0) {
       console.error(`[missing signals] ${missing.join(", ")}`);
     }

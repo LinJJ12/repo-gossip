@@ -2,6 +2,8 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import {
   runGossip,
   runScore,
+  runCompare,
+  parseCompareRepos,
   toDiscordEmbed,
   toFeishuCard,
   extractByokEnv,
@@ -13,6 +15,7 @@ import {
   getGossipCache,
   setGossipCache,
   parseRepoRef,
+  type ScoreLocale,
 } from "../packages/core/src/index.js";
 import {
   authorizeGossip,
@@ -22,20 +25,26 @@ import {
 
 type GossipBody = {
   repo?: string;
+  /** mode=compare 时的仓库列表(2-4 个);也可用 repo 逗号分隔。 */
+  repos?: string[];
   offline?: boolean;
   format?: string;
   days?: number;
-  /** "score" → 含金量评分卡;缺省/"gossip" → 八卦小报。 */
+  /** "score" → 含金量评分卡;"compare" → 多仓库对比;缺省 → 八卦小报。 */
   mode?: string;
+  /** 评分/对比输出语言(默认 zh)。 */
+  lang?: string;
 };
 
 const WINDOW_MS = 60 * 60 * 1000;
 
 /**
  * POST /api/gossip
- * body: { "repo": "owner/repo", "offline"?: boolean, "days"?: number, "format"?: "markdown"|"json"|"discord"|"feishu"|"web", "mode"?: "score" }
+ * body: { "repo": "owner/repo", "offline"?: boolean, "days"?: number, "format"?: "markdown"|"json"|"discord"|"feishu"|"web", "mode"?: "score"|"compare", "repos"?: string[], "lang"?: "zh"|"en" }
  *
  * mode "score" → 含金量评分卡 { kind:"score", score, message, missing }。
+ * mode "compare" → 多仓库对比 { kind:"compare", entries, message }(repos 2-4 个,单个失败呈现为 N/A 列)。
+ * lang "en" → 评分/对比文案切换英文(默认 zh)。
  *
  * Public by default (no WEBHOOK_SECRET required). Optional internal auth via
  * Authorization: Bearer / x-webhook-secret. Kill-switch: GOSSIP_REQUIRE_WEBHOOK_SECRET=1.
@@ -52,11 +61,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === "GET") {
     const repo = typeof req.query.repo === "string" ? req.query.repo : "";
-    if (!repo) {
+    const hasQueryRepos =
+      typeof req.query.repos === "string" || Array.isArray(req.query.repos);
+    const isCompareQuery = req.query.mode === "compare" && hasQueryRepos;
+    if (!repo && !isCompareQuery) {
       res.status(200).json({
         ok: true,
         usage:
-          'GET /api/gossip?repo=owner/repo or POST {"repo":"owner/repo","format":"web"}',
+          'GET /api/gossip?repo=owner/repo or POST {"repo":"owner/repo","format":"web"}; score: {"mode":"score"}; compare: {"mode":"compare","repos":["a/b","c/d"]}',
       });
       return;
     }
@@ -72,6 +84,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       days,
       auth.internal,
       typeof req.query.mode === "string" ? req.query.mode : undefined,
+      typeof req.query.repos === "string"
+        ? req.query.repos
+        : Array.isArray(req.query.repos)
+          ? req.query.repos.filter((r): r is string => typeof r === "string")
+          : undefined,
+      typeof req.query.lang === "string" ? req.query.lang : undefined,
     );
   }
 
@@ -91,8 +109,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  if (!body.repo || typeof body.repo !== "string") {
+  const normalizedMode = typeof body.mode === "string" ? body.mode.trim().toLowerCase() : "";
+  const hasRepos =
+    (Array.isArray(body.repos) && body.repos.length > 0) ||
+    (typeof body.repo === "string" && body.repo.includes(","));
+  if (normalizedMode !== "compare" && (!body.repo || typeof body.repo !== "string")) {
     res.status(400).json({ error: "missing repo" });
+    return;
+  }
+  if (normalizedMode === "compare" && !hasRepos) {
+    res.status(400).json({
+      error: 'compare needs repos, e.g. {"mode":"compare","repos":["owner/a","owner/b"]}',
+    });
     return;
   }
 
@@ -105,12 +133,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   return respond(
     req,
     res,
-    body.repo,
+    body.repo ?? "",
     Boolean(body.offline),
     typeof body.format === "string" ? body.format : "web",
     days,
     auth.internal,
     typeof body.mode === "string" ? body.mode : undefined,
+    Array.isArray(body.repos)
+      ? body.repos.filter((r): r is string => typeof r === "string")
+      : undefined,
+    typeof body.lang === "string" ? body.lang : undefined,
   );
 }
 
@@ -173,26 +205,49 @@ async function respond(
   days: number,
   internal: boolean,
   mode?: string,
+  repos?: string | string[],
+  lang?: string,
 ) {
-  let repoKey: string;
-  try {
-    const ref = parseRepoRef(repo);
-    repoKey = `${ref.owner}/${ref.repo}`.toLowerCase();
-  } catch (err) {
-    res.status(400).json({
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return;
-  }
+  const locale: ScoreLocale = (lang ?? "").trim().toLowerCase() === "en" ? "en" : "zh";
+  const normalizedMode = (mode ?? "").trim().toLowerCase();
+  const scoreMode = normalizedMode === "score";
+  const compareMode = normalizedMode === "compare";
 
   const env = extractByokEnv(
     req.headers as Record<string, string | string[] | undefined>,
   );
   const ttlSec = parsePositiveInt(process.env.GOSSIP_CACHE_TTL_SEC, 600);
   const normalizedFormat = format.trim().toLowerCase() || "web";
-  const scoreMode = (mode ?? "").trim().toLowerCase() === "score";
-  // Cache key carries the effective surface ("score" vs tabloid format).
-  const cacheFormat = scoreMode ? "score" : normalizedFormat;
+
+  let repoKey: string;
+  let compareList: string[] | null = null;
+
+  if (compareMode) {
+    // 对比模式:单个仓库失败应呈现为 N/A 列,因此不做硬校验;
+    // 仅校验数量与格式规范(parseCompareRepos)。
+    try {
+      compareList = parseCompareRepos(repos ?? (repo ? [repo] : []));
+    } catch (err) {
+      res.status(400).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return;
+    }
+    repoKey = compareList.join(",").toLowerCase();
+  } else {
+    try {
+      const ref = parseRepoRef(repo);
+      repoKey = `${ref.owner}/${ref.repo}`.toLowerCase();
+    } catch (err) {
+      res.status(400).json({
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return;
+    }
+  }
+
+  // Cache key carries the effective surface ("score"/"compare" vs tabloid format).
+  const cacheFormat = scoreMode ? "score" : compareMode ? "compare" : normalizedFormat;
   const cacheKey = buildGossipCacheKey({
     repo: repoKey,
     days,
@@ -213,8 +268,21 @@ async function respond(
 
   try {
     if (scoreMode) {
-      const { score, message, missing } = await runScore({ repo, env });
+      const { score, message, missing } = await runScore({ repo, env, locale });
       const body = { kind: "score" as const, score, message, missing };
+      setGossipCache(cacheKey, { status: 200, body }, ttlSec);
+      res.setHeader("X-Cache", "MISS");
+      res.status(200).json(body);
+      return;
+    }
+
+    if (compareMode && compareList) {
+      const { entries, message } = await runCompare({
+        repos: compareList,
+        env,
+        locale,
+      });
+      const body = { kind: "compare" as const, entries, message };
       setGossipCache(cacheKey, { status: 200, body }, ttlSec);
       res.setHeader("X-Cache", "MISS");
       res.status(200).json(body);

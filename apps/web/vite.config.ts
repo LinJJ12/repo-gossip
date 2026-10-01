@@ -46,6 +46,8 @@ function gossipApiPlugin(): Plugin {
           let offline = url.searchParams.get("offline") === "1";
           let days = Number(url.searchParams.get("days") ?? "14");
           let mode = url.searchParams.get("mode") ?? undefined;
+          let reposRaw = url.searchParams.get("repos") ?? undefined;
+          let lang = url.searchParams.get("lang") ?? undefined;
 
           if (req.method === "POST") {
             const chunks: Buffer[] = [];
@@ -62,9 +64,11 @@ function gossipApiPlugin(): Plugin {
             }
             let body: {
               repo?: string;
+              repos?: string[];
               offline?: boolean;
               days?: number;
               mode?: string;
+              lang?: string;
             } = {};
             try {
               body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
@@ -77,9 +81,14 @@ function gossipApiPlugin(): Plugin {
             if (typeof body.offline === "boolean") offline = body.offline;
             if (typeof body.days === "number") days = body.days;
             if (typeof body.mode === "string") mode = body.mode;
+            if (Array.isArray(body.repos)) reposRaw = body.repos.join(",");
+            if (typeof body.lang === "string") lang = body.lang;
           }
 
-          if (!repo) {
+          const normalizedMode = (mode ?? "").trim().toLowerCase();
+          const isCompare = normalizedMode === "compare";
+
+          if (!repo && !(isCompare && reposRaw)) {
             // 与 api/gossip.ts 对齐:GET 无 repo = 健康检查(200 usage),POST 缺参 = 400。
             res.statusCode = req.method === "GET" ? 200 : 400;
             res.setHeader("Content-Type", "application/json");
@@ -89,7 +98,7 @@ function gossipApiPlugin(): Plugin {
                   ? {
                       ok: true,
                       usage:
-                        'GET /api/gossip?repo=owner/repo or POST {"repo":"owner/repo","format":"web"}',
+                        'GET /api/gossip?repo=owner/repo or POST {"repo":"owner/repo","format":"web"}; score: {"mode":"score"}; compare: {"mode":"compare","repos":["a/b","c/d"]}',
                     }
                   : { error: "请提供 repo" },
               ),
@@ -98,40 +107,65 @@ function gossipApiPlugin(): Plugin {
           }
 
           // 与 api/gossip.ts 对齐:非法 repo 表达式 → 400(而非管线抛错后的 500)。
-          try {
-            (await server.ssrLoadModule(
-              path.resolve(repoRoot, "packages/core/src/config.ts"),
-            )).parseRepoRef(repo);
-          } catch (err) {
-            res.statusCode = 400;
-            res.setHeader("Content-Type", "application/json");
-            res.end(
-              JSON.stringify({
-                error: err instanceof Error ? err.message : String(err),
-              }),
-            );
-            return;
+          // compare 模式例外:单个仓库失败应呈现为 N/A 列,由 runCompare 软处理。
+          if (!isCompare) {
+            try {
+              (await server.ssrLoadModule(
+                path.resolve(repoRoot, "packages/core/src/config.ts"),
+              )).parseRepoRef(repo);
+            } catch (err) {
+              res.statusCode = 400;
+              res.setHeader("Content-Type", "application/json");
+              res.end(
+                JSON.stringify({
+                  error: err instanceof Error ? err.message : String(err),
+                }),
+              );
+              return;
+            }
           }
 
-          const [{ runGossip, runScore }, { extractByokEnv, clampGossipDays }] =
-            await Promise.all([
-              server.ssrLoadModule(
-                path.resolve(repoRoot, "packages/core/src/gossip.ts"),
-              ),
-              server.ssrLoadModule(
-                path.resolve(repoRoot, "packages/core/src/index.ts"),
-              ),
-            ]);
+          const [
+            { runGossip, runScore, runCompare },
+            { extractByokEnv, clampGossipDays, parseCompareRepos },
+          ] = await Promise.all([
+            server.ssrLoadModule(
+              path.resolve(repoRoot, "packages/core/src/gossip.ts"),
+            ),
+            server.ssrLoadModule(
+              path.resolve(repoRoot, "packages/core/src/index.ts"),
+            ),
+          ]);
 
           const env = extractByokEnv(
             req.headers as Record<string, string | string[] | undefined>,
           );
+          const locale = (lang ?? "").trim().toLowerCase() === "en" ? "en" : "zh";
 
-          if ((mode ?? "").trim().toLowerCase() === "score") {
-            const { score, message, missing } = await runScore({ repo, env });
+          if (normalizedMode === "score") {
+            const { score, message, missing } = await runScore({ repo, env, locale });
             res.statusCode = 200;
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify({ kind: "score", score, message, missing }));
+            return;
+          }
+
+          if (isCompare) {
+            try {
+              const repos = parseCompareRepos(reposRaw!);
+              const { entries, message } = await runCompare({ repos, env, locale });
+              res.statusCode = 200;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ kind: "compare", entries, message }));
+            } catch (err) {
+              res.statusCode = 400;
+              res.setHeader("Content-Type", "application/json");
+              res.end(
+                JSON.stringify({
+                  error: err instanceof Error ? err.message : String(err),
+                }),
+              );
+            }
             return;
           }
 
@@ -175,12 +209,17 @@ function badgeApiPlugin(): Plugin {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         // GET /api/badge/:owner/:repo.svg
+        const [pathOnly, queryPart] = (req.url ?? "").split("?");
         const match = /^\/api\/badge\/([^/]+)\/([^/]+?)(?:\.svg)?$/.exec(
-          req.url?.split("?")[0] ?? "",
+          pathOnly,
         );
         if (!match || req.method !== "GET") return next();
 
         const [, owner, repo] = match;
+        const badgeLocale =
+          new URLSearchParams(queryPart ?? "").get("lang")?.toLowerCase() === "en"
+            ? "en"
+            : "zh";
         try {
           const [
             { runScore },
@@ -205,10 +244,10 @@ function badgeApiPlugin(): Plugin {
           res.statusCode = 200;
           res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
           try {
-            const { score } = await runScore({ repo: repoRef });
-            res.end(formatBadgeSvg(score));
+            const { score } = await runScore({ repo: repoRef, locale: badgeLocale });
+            res.end(formatBadgeSvg(score, badgeLocale));
           } catch {
-            res.end(badgeErrorSvg());
+            res.end(badgeErrorSvg(badgeLocale));
           }
         } catch (err) {
           res.statusCode = 500;

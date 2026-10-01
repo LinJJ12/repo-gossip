@@ -3,6 +3,9 @@ export type RepoRef = {
   repo: string;
 };
 
+/** 评分卡/徽章/对比输出的文案语言;zh 为默认,en 为显式选择。 */
+export type ScoreLocale = "zh" | "en";
+
 export type CommitStat = {
   sha: string;
   message: string;

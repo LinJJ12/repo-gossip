@@ -1,5 +1,6 @@
 export type {
   RepoRef,
+  ScoreLocale,
   Tabloid,
   AnalyzedGossip,
   PlatformMessage,
@@ -16,8 +17,8 @@ export type {
 export { parseRepoRef, loadEnv, envSchema } from "./config.js";
 export type { Env } from "./config.js";
 
-export { runGossip, buildOfflineTabloid, runScore } from "./gossip.js";
-export type { GossipOptions, GossipMode, ScoreOptions } from "./gossip.js";
+export { runGossip, buildOfflineTabloid, runScore, runCompare } from "./gossip.js";
+export type { GossipOptions, GossipMode, ScoreOptions, CompareOptions } from "./gossip.js";
 
 export {
   computeRepoScore,
@@ -48,6 +49,7 @@ export {
   starSeriesByDay,
   detectStarBursts,
   estimateWatermark,
+  watermarkLevelLabel,
   WATERMARK_LEVEL_LABEL,
 } from "./watermark.js";
 export type {
@@ -61,7 +63,17 @@ export {
   badgeErrorSvg,
   resolveBadgeRepoParam,
   badgeTextWidth,
+  GRADE_COLORS,
 } from "./badge.js";
+
+export {
+  formatCompareTable,
+  formatCompareRadarSvg,
+  parseCompareRepos,
+  COMPARE_MIN,
+  COMPARE_MAX,
+} from "./compare.js";
+export type { CompareEntry } from "./compare.js";
 
 export {
   extractByokEnv,

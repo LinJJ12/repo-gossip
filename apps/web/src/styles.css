@@ -826,3 +826,76 @@ select {
 .score-empty p {
   color: var(--muted);
 }
+
+/* ------------------------------------------------------------------ */
+/* 仓库对比 (compare)                                                   */
+/* ------------------------------------------------------------------ */
+
+.compare-title {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  margin: 0.4rem 0 0;
+}
+
+.compare-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.compare-table {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  min-width: min(420px, 100%);
+  flex: 1 1 320px;
+}
+
+.compare-table th,
+.compare-table td {
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+.compare-table th {
+  font-family: var(--font-display);
+  color: var(--teal);
+  font-weight: 600;
+}
+
+.compare-table .compare-total td {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--lime);
+}
+
+.compare-radar svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.compare-legend {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+}
+
+.legend-swatch {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 3px;
+  border: 2px solid var(--teal);
+  margin-right: 0.35rem;
+  vertical-align: -1px;
+}

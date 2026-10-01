@@ -1,11 +1,17 @@
 import { loadEnv, parseRepoRef } from "./config.js";
-import type { AnalyzedGossip, PlatformMessage, RepoRef, Tabloid } from "./types.js";
+import type { AnalyzedGossip, PlatformMessage, RepoRef, ScoreLocale, Tabloid } from "./types.js";
 import type { RepoScore } from "./score.js";
 import { analyzeSnapshot } from "./analyzer.js";
 import { formatTabloid } from "./format.js";
 import { createOctokit, fetchRepoSnapshot } from "./github.js";
 import { fetchRepoScoreInput } from "./github-score.js";
 import { computeRepoScore, formatScoreCard } from "./score.js";
+import {
+  COMPARE_MAX,
+  COMPARE_MIN,
+  formatCompareTable,
+  type CompareEntry,
+} from "./compare.js";
 import { dramatizeLocally, generateTabloid } from "./llm.js";
 
 export type GossipOptions = {
@@ -83,6 +89,7 @@ export async function runGossip(options: GossipOptions): Promise<{
 
 export type ScoreOptions = {
   repo: string;
+  locale?: ScoreLocale;
   env?: Record<string, string | undefined>;
   /** 测试注入用;缺省按 GITHUB_TOKEN 新建。 */
   octokit?: ReturnType<typeof createOctokit>;
@@ -100,11 +107,68 @@ export async function runScore(options: ScoreOptions): Promise<{
 }> {
   const ref: RepoRef = parseRepoRef(options.repo);
   const githubToken = options.env?.GITHUB_TOKEN ?? process.env.GITHUB_TOKEN;
+  const locale: ScoreLocale = options.locale ?? "zh";
 
   const octokit = options.octokit ?? createOctokit(githubToken);
   const { input, missing } = await fetchRepoScoreInput(octokit, ref);
-  const score = computeRepoScore(input);
-  return { score, message: formatScoreCard(score), missing };
+  const score = computeRepoScore(input, locale);
+  return { score, message: formatScoreCard(score, locale), missing };
+}
+
+export type CompareOptions = {
+  repos: string[];
+  locale?: ScoreLocale;
+  env?: Record<string, string | undefined>;
+  /** 测试注入用;缺省按 GITHUB_TOKEN 新建。 */
+  octokit?: ReturnType<typeof createOctokit>;
+};
+
+/**
+ * 仓库对比管线:逐仓库独立评分(2-4 个),单个失败以 N/A 列呈现不拖垮整表。
+ * 返回结构化 entries(供 Web 雷达图)+ 渲染好的 Markdown 对照表。
+ */
+export async function runCompare(options: CompareOptions): Promise<{
+  entries: CompareEntry[];
+  message: PlatformMessage;
+}> {
+  const locale: ScoreLocale = options.locale ?? "zh";
+  const repos = options.repos
+    .map((r) => r.trim())
+    .filter((r) => r !== "");
+  if (repos.length < COMPARE_MIN) {
+    throw new Error(
+      `compare needs ${COMPARE_MIN}-${COMPARE_MAX} repos, e.g. "owner/a owner/b"`,
+    );
+  }
+  if (repos.length > COMPARE_MAX) {
+    throw new Error(
+      `compare supports at most ${COMPARE_MAX} repos (got ${repos.length})`,
+    );
+  }
+
+  const githubToken = options.env?.GITHUB_TOKEN ?? process.env.GITHUB_TOKEN;
+  const octokit = options.octokit ?? createOctokit(githubToken);
+
+  const entries: CompareEntry[] = await Promise.all(
+    repos.map(async (raw) => {
+      try {
+        const ref = parseRepoRef(raw);
+        const { input } = await fetchRepoScoreInput(octokit, ref);
+        return {
+          repo: `${ref.owner}/${ref.repo}`,
+          score: computeRepoScore(input, locale),
+        };
+      } catch (err) {
+        return {
+          repo: raw,
+          score: null,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }),
+  );
+
+  return { entries, message: formatCompareTable(entries, locale) };
 }
 
 export function buildOfflineTabloid(analyzed: AnalyzedGossip): Tabloid {

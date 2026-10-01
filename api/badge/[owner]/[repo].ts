@@ -28,9 +28,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  const locale: "zh" | "en" =
+    typeof req.query.lang === "string" && req.query.lang.toLowerCase() === "en"
+      ? "en"
+      : "zh";
+
   const ttlSec = Number(process.env.GOSSIP_CACHE_TTL_SEC) || 600;
   const cacheKey = buildGossipCacheKey({
-    repo: repoRef,
+    repo: `${locale}|${repoRef}`,
     days: 0,
     offline: true,
     format: "badge",
@@ -48,14 +53,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { score } = await runScore({ repo: repoRef });
-    const svg = formatBadgeSvg(score);
+    const { score } = await runScore({ repo: repoRef, locale });
+    const svg = formatBadgeSvg(score, locale);
     setGossipCache(cacheKey, { status: 200, body: svg }, Math.max(ttlSec, 600));
     res.setHeader("X-Cache", "MISS");
     res.status(200).send(svg);
   } catch {
     // 仓库不存在 / 限额 / 网络失败 —— 一律灰色 N/A,不破图。
     res.setHeader("X-Cache", "BYPASS");
-    res.status(200).send(badgeErrorSvg());
+    res.status(200).send(badgeErrorSvg(locale));
   }
 }
