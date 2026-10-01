@@ -7,6 +7,12 @@ const LEVEL_ICON: Record<string, string> = {
   unknown: "·",
 };
 
+const WATERMARK_LABEL: Record<string, string> = {
+  clean: "干净",
+  suspicious: "存疑",
+  "high-risk": "高危",
+};
+
 /** 暗色编辑部风格的金铺检定卡:总分 + 五维条 + 健全性警示。 */
 export function ScoreView({ data }: { data: ScorePayload }) {
   const { score } = data;
@@ -27,6 +33,9 @@ export function ScoreView({ data }: { data: ScorePayload }) {
         )}
         <p className="score-conf">
           置信度 {score.confidence.value}({score.confidence.label}) · {score.fullName}
+        </p>
+        <p className="score-conf">
+          💧 含水量 {score.watermark.percent}%({WATERMARK_LABEL[score.watermark.level]})
         </p>
         {data.missing.length > 0 && (
           <p className="score-missing">部分信号缺失:{data.missing.join(" · ")}</p>
@@ -78,11 +87,23 @@ export function ScoreView({ data }: { data: ScorePayload }) {
             </li>
           ))}
         </ul>
+        {score.watermark.level !== "clean" && score.watermark.notes.length > 0 && (
+          <>
+            <h3 className="score-sanity-title">含水量依据</h3>
+            <ul>
+              {score.watermark.notes.map((n, i) => (
+                <li key={i} className="sanity-warn">
+                  <span aria-hidden>💧</span> {n}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
       </section>
 
       <footer className="score-foot">
         评分基于 GitHub 公开数据的可解释模型(影响力/活跃度/社区/工程/信用度各 20%)。
-        时间线反刷星检测即将接入。
+        含水量为比例+时间线信号的统计估计,不构成对任何账号的指控。
       </footer>
     </article>
   );

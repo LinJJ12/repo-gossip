@@ -103,6 +103,15 @@ function makeStub(opts: StubOpts = {}): Octokit {
         throw { status: 404 };
       },
     },
+    activity: {
+      // 平稳时间线:30 个 star 分散在 30 天,无突发
+      listStargazersForRepo: async () => ({
+        data: Array.from({ length: 30 }, (_, i) => ({
+          starred_at: new Date(Date.now() - i * 86_400_000).toISOString(),
+          user: { login: `stargazer${i}` },
+        })),
+      }),
+    },
     search: {
       issuesAndPullRequests: async ({ q }: { q: string }) => {
         if (searchFail) throw { status: 500, message: "boom" };

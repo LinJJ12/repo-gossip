@@ -1,0 +1,106 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import {
+  detectStarBursts,
+  estimateWatermark,
+  starSeriesByDay,
+} from "../packages/core/src/watermark.js";
+
+function daysAgo(n: number): string {
+  return new Date(Date.now() - n * 86_400_000).toISOString();
+}
+
+describe("starSeriesByDay", () => {
+  it("按 UTC 天聚合并旧→新排序", () => {
+    const series = starSeriesByDay([
+      daysAgo(0),
+      daysAgo(0),
+      daysAgo(1),
+      daysAgo(2),
+    ]);
+    assert.equal(series?.length, 3);
+    assert.equal(series?.[0]?.count, 1);
+    assert.equal(series?.[2]?.count, 2);
+  });
+
+  it("无效时间戳跳过;空输入返回 null", () => {
+    assert.equal(starSeriesByDay(["not-a-date"]), null);
+    assert.equal(starSeriesByDay([]), null);
+    const series = starSeriesByDay(["2026-01-01T00:00:00Z", "garbage"]);
+    assert.equal(series?.length, 1);
+  });
+});
+
+describe("detectStarBursts", () => {
+  it("覆盖不足(<7 天)返回 null", () => {
+    assert.equal(
+      detectStarBursts([daysAgo(0), daysAgo(1), daysAgo(2)]),
+      null,
+    );
+    assert.equal(detectStarBursts([]), null);
+  });
+
+  it("平稳低增长序列不误报", () => {
+    const starredAt = Array.from({ length: 30 }, (_, i) => daysAgo(29 - i));
+    const bursts = detectStarBursts(starredAt);
+    assert.deepEqual(bursts, []);
+  });
+
+  it("单日尖峰(≥ max(40, 均值+3σ))→ high", () => {
+    const starredAt = [
+      ...Array.from({ length: 15 }, (_, i) => daysAgo(29 - i)),
+      ...Array.from({ length: 60 }, () => daysAgo(10)),
+      ...Array.from({ length: 14 }, (_, i) => daysAgo(9 - i)),
+    ];
+    const bursts = detectStarBursts(starredAt);
+    assert.equal(bursts?.length, 1);
+    assert.equal(bursts?.[0]?.level, "high");
+    assert.equal(bursts?.[0]?.stars, 60);
+  });
+
+  it("连续 3 天堆量(无单日尖峰)→ medium", () => {
+    const starredAt = [
+      ...Array.from({ length: 26 }, (_, i) => daysAgo(4 + i)), // 每天 1 个,4~29 天前
+      ...Array.from({ length: 3 }, (_, k) =>
+        Array.from({ length: 30 }, () => daysAgo(1 + k)),
+      ).flat(),
+    ];
+    const bursts = detectStarBursts(starredAt);
+    assert.equal(bursts?.length, 1);
+    assert.equal(bursts?.[0]?.level, "medium");
+    assert.equal(bursts?.[0]?.stars, 90);
+  });
+});
+
+describe("estimateWatermark", () => {
+  it("无突发且无比例异常 → clean 0", () => {
+    const w = estimateWatermark([], 0, 0, "covered");
+    assert.equal(w.percent, 0);
+    assert.equal(w.level, "clean");
+    assert.match(w.notes[0]!, /平稳/);
+  });
+
+  it("high 突发 + 2 fail → 高危", () => {
+    const w = estimateWatermark(
+      [{ start: "2026-09-20", end: "2026-09-20", stars: 80, level: "high" }],
+      0,
+      2,
+      "covered",
+    );
+    assert.equal(w.percent, 54);
+    assert.equal(w.level, "high-risk");
+  });
+
+  it("时间线不可用/未抓取时如实标注", () => {
+    // 有数据但不足 7 天
+    const w = estimateWatermark(null, 0, 0, "covered");
+    assert.equal(w.level, "clean");
+    assert.match(w.notes[0]!, /覆盖不足/);
+    // 低星仓库主动跳过
+    const w2 = estimateWatermark(null, 0, 0, "skipped");
+    assert.match(w2.notes[0]!, /未抓取/);
+    // 抓取失败(接口受限/未认证)
+    const w3 = estimateWatermark(null, 0, 0, "failed");
+    assert.match(w3.notes[0]!, /暂不可用/);
+  });
+});

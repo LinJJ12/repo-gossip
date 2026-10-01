@@ -43,6 +43,11 @@ function richInput(overrides: Partial<RepoScoreInput> = {}): RepoScoreInput {
     hasReadme: true,
     hasContributing: true,
     hasSecurity: true,
+    // 平稳的 star 时间线(180 天内均匀 ~0.5/天)→ 无突发
+    starredAt: Array.from({ length: 90 }, (_, i) =>
+      new Date(Date.now() - i * 2 * 86_400_000).toISOString(),
+    ),
+    starTimelineSkipped: false,
     missing: [],
     ...overrides,
   };
@@ -178,6 +183,8 @@ describe("computeRepoScore", () => {
       hasCi: null,
       hasContributing: null,
       hasSecurity: null,
+      starredAt: null,
+      starTimelineSkipped: false,
       missing: [
         "weeklyCommits",
         "contributors",
@@ -187,6 +194,7 @@ describe("computeRepoScore", () => {
         "subscribers",
         "releases90d",
         "checklist",
+        "stargazers",
       ],
     });
     const score = computeRepoScore(input);
@@ -197,13 +205,13 @@ describe("computeRepoScore", () => {
     assert.ok(byId.get("influence")?.score !== null);
     assert.ok(byId.get("engineering")?.score !== null);
     assert.ok(score.total !== null && score.total > 50 && score.total < 80, `total=${score.total}`);
-    assert.equal(score.confidence.value, 25);
+    assert.equal(score.confidence.value, 20);
     assert.equal(score.confidence.label, "不足");
     const w = score.dimensions.reduce((s, d) => s + d.weight, 0);
     assert.ok(Math.abs(w - 1) < 1e-9, `weights sum=${w}`);
   });
 
-  it("高星低互动:四项 sanity 全 fail,信用度归零", () => {
+  it("高星低互动:四项 sanity 全 fail,信用度归零,含水量高危", () => {
     const input = richInput({
       stars: 5_000,
       forks: 10,
@@ -218,6 +226,8 @@ describe("computeRepoScore", () => {
       closedIssues90d: 0,
       openIssues: 2,
       releases90d: 0,
+      starredAt: null,
+      starTimelineSkipped: false,
     });
     const score = computeRepoScore(input);
     const fails = score.sanity.filter((c) => c.level === "fail");
@@ -225,6 +235,32 @@ describe("computeRepoScore", () => {
     const cred = score.dimensions.find((d) => d.id === "credibility");
     assert.equal(cred?.score, 0);
     assert.equal(score.grade?.id, "tinfoil");
+    // 4 fail × 12 = 48
+    assert.equal(score.watermark.percent, 48);
+    assert.equal(score.watermark.level, "high-risk");
+  });
+
+  it("star 时间线突发:clean → 含水量上升并折入信用度", () => {
+    const withSpike = [
+      ...Array.from({ length: 27 }, (_, i) =>
+        new Date(Date.now() - (40 - i) * 86_400_000).toISOString(),
+      ),
+      // 单日 +60 的尖峰
+      ...Array.from({ length: 60 }, () =>
+        new Date(Date.now() - 10 * 86_400_000).toISOString(),
+      ),
+      ...Array.from({ length: 27 }, (_, i) =>
+        new Date(Date.now() - (30 - i) * 86_400_000).toISOString(),
+      ),
+    ];
+    const score = computeRepoScore(
+      richInput({ stars: 2_000, forks: 100, starredAt: withSpike }),
+    );
+    assert.ok(score.watermark.percent >= 30, `percent=${score.watermark.percent}`);
+    assert.ok(
+      score.watermark.notes.some((n) => n.includes("疑似刷量窗口")),
+      JSON.stringify(score.watermark.notes),
+    );
   });
 
   it("archived 仓库仍可评分(不硬性扣分,由活跃度自然反映)", () => {
@@ -258,6 +294,7 @@ describe("formatScoreCard", () => {
     assert.match(markdown, /影响力/);
     assert.match(markdown, /健全性警示/);
     assert.match(markdown, /🚨/);
+    assert.match(markdown, /含水量估计 48%\(高危\)/);
     assert.ok(!plain.includes("**"));
 
     const good = formatScoreCard(computeRepoScore(richInput()));

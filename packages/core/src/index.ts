@@ -45,6 +45,18 @@ export { fetchRepoScoreInput } from "./github-score.js";
 export type { RepoScoreFetchResult } from "./github-score.js";
 
 export {
+  starSeriesByDay,
+  detectStarBursts,
+  estimateWatermark,
+  WATERMARK_LEVEL_LABEL,
+} from "./watermark.js";
+export type {
+  StarBurst,
+  Watermark,
+  WatermarkLevel,
+} from "./watermark.js";
+
+export {
   extractByokEnv,
   extractWebhookCredential,
   decideWebhookAuth,

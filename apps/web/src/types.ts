@@ -82,6 +82,11 @@ export type ScorePayload = {
       level: "ok" | "warn" | "fail" | "unknown";
       detail: string;
     }[];
+    watermark: {
+      percent: number;
+      level: "clean" | "suspicious" | "high-risk";
+      notes: string[];
+    };
     scoredAt: string;
   };
 };

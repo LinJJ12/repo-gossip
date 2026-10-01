@@ -1,4 +1,10 @@
 import type { PlatformMessage, RepoRef } from "./types.js";
+import {
+  detectStarBursts,
+  estimateWatermark,
+  WATERMARK_LEVEL_LABEL,
+  type Watermark,
+} from "./watermark.js";
 
 /**
  * 含金量评分引擎 — 纯函数,无网络调用。
@@ -46,6 +52,13 @@ export type RepoScoreInput = {
   hasReadme: boolean | null;
   hasContributing: boolean | null;
   hasSecurity: boolean | null;
+  /**
+   * stargazer 时间线(starred_at,仅 star ≥ 500 的仓库抓取,≤400 个)。
+   * null = 抓取失败或未抓取(见 starTimelineSkipped)。
+   */
+  starredAt: string[] | null;
+  /** true = 因 star 不足主动跳过时间线抓取(不算缺失信号)。 */
+  starTimelineSkipped: boolean;
   /** 抓取阶段确认缺失的信号 id(用于置信度扣减)。 */
   missing: string[];
 };
@@ -81,6 +94,8 @@ export type RepoScore = {
   confidence: { value: number; label: string };
   dimensions: ScoreDimension[];
   sanity: SanityCheck[];
+  /** 含水量估计;时间线未覆盖且无比例异常时为 clean/低值,永不指控具体账号。 */
+  watermark: Watermark;
   scoredAt: string;
 };
 
@@ -110,6 +125,7 @@ const CONFIDENCE_PENALTY: Record<string, number> = {
   subscribers: 5,
   releases90d: 5,
   checklist: 10,
+  stargazers: 5,
 };
 
 const SANITY_PENALTY: Record<Exclude<SanityLevel, "ok" | "unknown">, number> = {
@@ -391,13 +407,14 @@ function pushedWithinDays(pushedAt: string | null, days: number): boolean | null
 function buildSanity(input: RepoScoreInput): {
   dimension: ScoreDimension;
   checks: SanityCheck[];
+  penalty: number;
 } {
   const checks: SanityCheck[] = [];
   let penalty = 0;
 
-  function push(id: string, label: string, level: SanityLevel, detail: string, weight = 1) {
+  function push(id: string, label: string, level: SanityLevel, detail: string) {
     checks.push({ id, label, level, detail });
-    if (level === "warn" || level === "fail") penalty += SANITY_PENALTY[level] * weight;
+    if (level === "warn" || level === "fail") penalty += SANITY_PENALTY[level];
   }
 
   const avg12 =
@@ -482,6 +499,7 @@ function buildSanity(input: RepoScoreInput): {
       lines,
     },
     checks,
+    penalty,
   };
 }
 
@@ -491,6 +509,32 @@ function buildSanity(input: RepoScoreInput): {
 
 export function computeRepoScore(input: RepoScoreInput): RepoScore {
   const { dimension: credibility, checks } = buildSanity(input);
+
+  // 含水量:时序突发 + 比例异常合成,非 clean 时按 60% 折算进信用度扣分。
+  const seriesCovered = (input.starredAt?.length ?? 0) > 0;
+  const bursts = seriesCovered ? detectStarBursts(input.starredAt!) : null;
+  const warnCount = checks.filter((c) => c.level === "warn").length;
+  const failCount = checks.filter((c) => c.level === "fail").length;
+  const timelineStatus: "covered" | "skipped" | "failed" = seriesCovered
+    ? "covered"
+    : input.starTimelineSkipped
+      ? "skipped"
+      : "failed";
+  const watermark = estimateWatermark(
+    bursts,
+    warnCount,
+    failCount,
+    timelineStatus,
+  );
+  if (watermark.level !== "clean") {
+    credibility.score =
+      credibility.score === null
+        ? null
+        : Math.max(0, credibility.score - Math.round(watermark.percent * 0.6));
+    credibility.lines.unshift(
+      `💧 含水量 ${watermark.percent}%(${WATERMARK_LEVEL_LABEL[watermark.level]})`,
+    );
+  }
 
   const dims: ScoreDimension[] = [
     buildInfluence(input),
@@ -525,6 +569,7 @@ export function computeRepoScore(input: RepoScoreInput): RepoScore {
     confidence: confidenceFromMissing(input.missing),
     dimensions: dims,
     sanity: checks,
+    watermark,
     scoredAt: new Date().toISOString(),
   };
 }
@@ -543,6 +588,11 @@ export function formatScoreCard(score: RepoScore): PlatformMessage {
 
   lines.push(`🧪 **含金量报告 · ${score.fullName}**`);
   lines.push(`🏅 **${totalText}${gradeText}** · 置信度 ${score.confidence.value}(${score.confidence.label})`);
+  if (score.watermark.level !== "clean") {
+    lines.push(
+      `💧 含水量估计 ${score.watermark.percent}%(${WATERMARK_LEVEL_LABEL[score.watermark.level]})`,
+    );
+  }
 
   for (const d of score.dimensions) {
     const scoreText = d.score === null ? "N/A" : String(Math.round(d.score));
@@ -560,7 +610,9 @@ export function formatScoreCard(score: RepoScore): PlatformMessage {
   }
 
   lines.push("");
-  lines.push("*含金量基于 GitHub 公开数据的可解释模型;比例信号近似,时间线反刷星检测即将接入。*");
+  lines.push(
+    "*含金量基于 GitHub 公开数据的可解释模型;含水量为比例+时间线信号的统计估计,不构成对任何账号的指控。*",
+  );
 
   const markdown = lines.join("\n");
   const plain = markdown.replace(/\*\*/g, "").replace(/`/g, "");

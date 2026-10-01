@@ -11,6 +11,10 @@ import { withGithubRetry } from "./github-retry.js";
 
 const WINDOW_DAYS = 90;
 const CONTRIBUTORS_PER_PAGE = 100;
+/** star 时间线抓取门槛:低于此值的仓库没有刷量价值,省下 4 次调用。 */
+const STAR_TIMELINE_MIN_STARS = 500;
+/** 最多 4 页 × 100 个 stargazer(带 starred_at 时间戳)。 */
+const STAR_TIMELINE_PAGES = 4;
 
 /** stats 端点首次调用返回 202(GitHub 在后台算缓存),按递增间隔重试。 */
 const STATS_RETRY_DELAYS_MS = [1_500, 2_500];
@@ -46,7 +50,7 @@ export async function fetchRepoScoreInput(
     }
   }
 
-  const [weeklyCommits, contributors, mergedPrs90d, closedIssues90d, openIssues, releases90d, hasReadme, hasCi, docs] =
+  const [weeklyCommits, contributors, mergedPrs90d, closedIssues90d, openIssues, releases90d, hasReadme, hasCi, docs, starredAt] =
     await Promise.all([
       fetchWeeklyCommits(octokit, ref, missing, options?.statsRetryDelayMs),
       soft("contributors", async () => {
@@ -119,6 +123,10 @@ export async function fetchRepoScoreInput(
       })(),
       // CONTRIBUTING / SECURITY 常见于根目录或 .github/ —— 各拉一份目录清单。
       probeDocs(octokit, ref, missing),
+      // star 时间线:小仓库跳过(不算缺失),抓取失败才登记 stargazers。
+      (repo.stargazers_count ?? 0) >= STAR_TIMELINE_MIN_STARS
+        ? fetchStargazerTimeline(octokit, ref, missing)
+        : Promise.resolve(null),
     ]);
 
   const hasContributing = docs?.hasContributing ?? null;
@@ -150,6 +158,8 @@ export async function fetchRepoScoreInput(
     hasReadme,
     hasContributing,
     hasSecurity,
+    starredAt,
+    starTimelineSkipped: (repo.stargazers_count ?? 0) < STAR_TIMELINE_MIN_STARS,
     missing: [...missing],
   };
 
@@ -253,6 +263,41 @@ async function probeDocs(
     hasContributing: names.some((n) => n.startsWith("contributing")),
     hasSecurity: names.some((n) => n.startsWith("security")),
   };
+}
+
+/**
+ * stargazer 时间线(starred_at,`star+json` media type),最多 4 页。
+ * 任一页失败 → 返回 null 并登记 stargazers(评分含水量标记覆盖不足)。
+ */
+async function fetchStargazerTimeline(
+  octokit: Octokit,
+  ref: RepoRef,
+  missing: Set<string>,
+): Promise<string[] | null> {
+  const starredAt: string[] = [];
+  try {
+    for (let page = 1; page <= STAR_TIMELINE_PAGES; page++) {
+      const { data } = await withGithubRetry(() =>
+        octokit.activity.listStargazersForRepo({
+          owner: ref.owner,
+          repo: ref.repo,
+          per_page: 100,
+          page,
+          request: { mediaType: { format: "star+json" } },
+        }),
+      );
+      if (!Array.isArray(data)) break;
+      for (const item of data) {
+        const t = (item as { starred_at?: string | null }).starred_at;
+        if (typeof t === "string") starredAt.push(t);
+      }
+      if (data.length < 100) break;
+    }
+    return starredAt;
+  } catch {
+    missing.add("stargazers");
+    return null;
+  }
 }
 
 function httpStatusOf(err: unknown): number | null {
