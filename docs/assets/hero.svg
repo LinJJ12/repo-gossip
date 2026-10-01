@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-label="repo/gossip — GitHub 仓库含金量检定 & 项目八卦小报">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0c0f14"/>
+      <stop offset="1" stop-color="#12161f"/>
+    </linearGradient>
+    <radialGradient id="glowLime" cx="0.82" cy="0.15" r="0.55">
+      <stop offset="0" stop-color="#d6ff3c" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#d6ff3c" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowTeal" cx="0.12" cy="0.9" r="0.5">
+      <stop offset="0" stop-color="#1de2c5" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#1de2c5" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowCoral" cx="0.5" cy="0.05" r="0.4">
+      <stop offset="0" stop-color="#ff4d6d" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#ff4d6d" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="goldbar" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1de2c5"/>
+      <stop offset="1" stop-color="#d6ff3c"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="300" fill="url(#bg)"/>
+  <rect width="1200" height="300" fill="url(#glowLime)"/>
+  <rect width="1200" height="300" fill="url(#glowTeal)"/>
+  <rect width="1200" height="300" fill="url(#glowCoral)"/>
+  <rect x="0.5" y="0.5" width="1199" height="299" fill="none" stroke="#d6ff3c" stroke-opacity="0.22"/>
+
+  <!-- masthead -->
+  <text x="72" y="74" font-family="'JetBrains Mono','Cascadia Code',Consolas,monospace" font-size="17" letter-spacing="6" fill="#9aa3b2">夜班编辑室出品</text>
+
+  <!-- wordmark: repo / gossip -->
+  <text x="66" y="170" font-family="'Segoe UI',system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif" font-weight="800" font-size="92" letter-spacing="1" fill="#f2efe6">repo<tspan fill="#ff4d6d" font-style="italic">/</tspan>gossip</text>
+
+  <!-- tagline -->
+  <text x="72" y="222" font-family="'Segoe UI',system-ui,'PingFang SC','Microsoft YaHei',sans-serif" font-size="21" fill="#c7cdd8">丢进仓库链接,拿走一份项目八卦小报 —— 或者一份<tspan fill="#d6ff3c" font-weight="700">含金量检定报告</tspan>。</text>
+
+  <!-- five-dimension gold bar motif -->
+  <g font-family="'JetBrains Mono',Consolas,monospace" font-size="13" fill="#9aa3b2">
+    <text x="72" y="266">🧲 影响力</text>
+    <text x="182" y="266">🔥 活跃度</text>
+    <text x="292" y="266">👥 社区</text>
+    <text x="402" y="266">🔧 工程</text>
+    <text x="512" y="266">🧪 信用度</text>
+  </g>
+  <g>
+    <rect x="72"  y="276" width="96" height="6" rx="3" fill="url(#goldbar)"/>
+    <rect x="182" y="276" width="96" height="6" rx="3" fill="url(#goldbar)"/>
+    <rect x="292" y="276" width="96" height="6" rx="3" fill="url(#goldbar)"/>
+    <rect x="402" y="276" width="96" height="6" rx="3" fill="url(#goldbar)"/>
+    <rect x="512" y="276" width="96" height="6" rx="3" fill="url(#goldbar)"/>
+  </g>
+
+  <!-- grade medal on the right -->
+  <g transform="translate(940,84)">
+    <rect x="0" y="0" width="196" height="132" rx="14" fill="#151a22" stroke="#d4a017" stroke-opacity="0.55"/>
+    <text x="98" y="46" text-anchor="middle" font-family="'Segoe UI',system-ui,sans-serif" font-weight="800" font-size="34" fill="#d6ff3c">95<tspan font-size="18" fill="#9aa3b2" font-weight="400"> / 100</tspan></text>
+    <text x="98" y="80" text-anchor="middle" font-family="'Segoe UI',system-ui,'PingFang SC','Microsoft YaHei',sans-serif" font-size="20" fill="#f2efe6">🥇 足金</text>
+    <text x="98" y="110" text-anchor="middle" font-family="'JetBrains Mono',Consolas,monospace" font-size="13" fill="#9aa3b2">含金量 · vercel/next.js</text>
+  </g>
+</svg>
