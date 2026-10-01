@@ -1,8 +1,11 @@
 import { loadEnv, parseRepoRef } from "./config.js";
-import type { AnalyzedGossip, PlatformMessage, Tabloid } from "./types.js";
+import type { AnalyzedGossip, PlatformMessage, RepoRef, Tabloid } from "./types.js";
+import type { RepoScore } from "./score.js";
 import { analyzeSnapshot } from "./analyzer.js";
 import { formatTabloid } from "./format.js";
 import { createOctokit, fetchRepoSnapshot } from "./github.js";
+import { fetchRepoScoreInput } from "./github-score.js";
+import { computeRepoScore, formatScoreCard } from "./score.js";
 import { dramatizeLocally, generateTabloid } from "./llm.js";
 
 export type GossipOptions = {
@@ -76,6 +79,32 @@ export async function runGossip(options: GossipOptions): Promise<{
     llmError,
     warnings: warnings.length ? warnings : undefined,
   };
+}
+
+export type ScoreOptions = {
+  repo: string;
+  env?: Record<string, string | undefined>;
+  /** 测试注入用;缺省按 GITHUB_TOKEN 新建。 */
+  octokit?: ReturnType<typeof createOctokit>;
+};
+
+/**
+ * 含金量评分管线(与 runGossip 并行,不改动既有出报路径):
+ * fetch(软失败降级)→ computeRepoScore(纯函数)→ formatScoreCard。
+ * P0 不接 LLM:评分卡由模板直出,避免幻觉数字。
+ */
+export async function runScore(options: ScoreOptions): Promise<{
+  score: RepoScore;
+  message: PlatformMessage;
+  missing: string[];
+}> {
+  const ref: RepoRef = parseRepoRef(options.repo);
+  const githubToken = options.env?.GITHUB_TOKEN ?? process.env.GITHUB_TOKEN;
+
+  const octokit = options.octokit ?? createOctokit(githubToken);
+  const { input, missing } = await fetchRepoScoreInput(octokit, ref);
+  const score = computeRepoScore(input);
+  return { score, message: formatScoreCard(score), missing };
 }
 
 export function buildOfflineTabloid(analyzed: AnalyzedGossip): Tabloid {

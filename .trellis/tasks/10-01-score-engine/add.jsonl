@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/core/backend/index.md", "reason": "core 开发前置清单与质量检查"}
+{"file": ".trellis/spec/core/backend/pipeline.md", "reason": "runGossip 管线与模式语义,runScore 需并行于它"}
+{"file": ".trellis/spec/core/backend/error-handling.md", "reason": "throw vs degrade 语义,软失败要求"}
+{"file": ".trellis/spec/core/backend/quality-guidelines.md", "reason": "类型/导出/测试规范"}
+{"file": ".trellis/spec/web/frontend/index.md", "reason": "Web 评分卡视图需遵循前端规范"}

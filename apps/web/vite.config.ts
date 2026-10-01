@@ -45,6 +45,7 @@ function gossipApiPlugin(): Plugin {
           let repo = url.searchParams.get("repo") ?? "";
           let offline = url.searchParams.get("offline") === "1";
           let days = Number(url.searchParams.get("days") ?? "14");
+          let mode = url.searchParams.get("mode") ?? undefined;
 
           if (req.method === "POST") {
             const chunks: Buffer[] = [];
@@ -63,6 +64,7 @@ function gossipApiPlugin(): Plugin {
               repo?: string;
               offline?: boolean;
               days?: number;
+              mode?: string;
             } = {};
             try {
               body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
@@ -74,6 +76,7 @@ function gossipApiPlugin(): Plugin {
             repo = body.repo ?? repo;
             if (typeof body.offline === "boolean") offline = body.offline;
             if (typeof body.days === "number") days = body.days;
+            if (typeof body.mode === "string") mode = body.mode;
           }
 
           if (!repo) {
@@ -83,7 +86,7 @@ function gossipApiPlugin(): Plugin {
             return;
           }
 
-          const [{ runGossip }, { extractByokEnv, clampGossipDays }] =
+          const [{ runGossip, runScore }, { extractByokEnv, clampGossipDays }] =
             await Promise.all([
               server.ssrLoadModule(
                 path.resolve(repoRoot, "packages/core/src/gossip.ts"),
@@ -96,6 +99,14 @@ function gossipApiPlugin(): Plugin {
           const env = extractByokEnv(
             req.headers as Record<string, string | string[] | undefined>,
           );
+
+          if ((mode ?? "").trim().toLowerCase() === "score") {
+            const { score, message, missing } = await runScore({ repo, env });
+            res.statusCode = 200;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ kind: "score", score, message, missing }));
+            return;
+          }
 
           const result = await runGossip({
             repo,

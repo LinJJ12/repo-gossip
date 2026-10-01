@@ -50,3 +50,38 @@ export type TabloidPayload = {
   };
   message: { markdown: string; plain: string };
 };
+
+export type ScoreDimensionId =
+  | "influence"
+  | "activity"
+  | "community"
+  | "engineering"
+  | "credibility";
+
+export type ScorePayload = {
+  kind: "score";
+  message: { markdown: string; plain: string };
+  missing: string[];
+  score: {
+    ref: { owner: string; repo: string };
+    fullName: string;
+    total: number | null;
+    grade: { id: string; label: string; emoji: string } | null;
+    confidence: { value: number; label: string };
+    dimensions: {
+      id: ScoreDimensionId;
+      label: string;
+      emoji: string;
+      weight: number;
+      score: number | null;
+      lines: string[];
+    }[];
+    sanity: {
+      id: string;
+      label: string;
+      level: "ok" | "warn" | "fail" | "unknown";
+      detail: string;
+    }[];
+    scoredAt: string;
+  };
+};

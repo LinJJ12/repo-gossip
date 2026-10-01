@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import {
   runGossip,
+  runScore,
   toDiscordEmbed,
   toFeishuCard,
   extractByokEnv,
@@ -24,13 +25,17 @@ type GossipBody = {
   offline?: boolean;
   format?: string;
   days?: number;
+  /** "score" → 含金量评分卡;缺省/"gossip" → 八卦小报。 */
+  mode?: string;
 };
 
 const WINDOW_MS = 60 * 60 * 1000;
 
 /**
  * POST /api/gossip
- * body: { "repo": "owner/repo", "offline"?: boolean, "days"?: number, "format"?: "markdown"|"json"|"discord"|"feishu"|"web" }
+ * body: { "repo": "owner/repo", "offline"?: boolean, "days"?: number, "format"?: "markdown"|"json"|"discord"|"feishu"|"web", "mode"?: "score" }
+ *
+ * mode "score" → 含金量评分卡 { kind:"score", score, message, missing }。
  *
  * Public by default (no WEBHOOK_SECRET required). Optional internal auth via
  * Authorization: Bearer / x-webhook-secret. Kill-switch: GOSSIP_REQUIRE_WEBHOOK_SECRET=1.
@@ -66,6 +71,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       String(req.query.format ?? "web"),
       days,
       auth.internal,
+      typeof req.query.mode === "string" ? req.query.mode : undefined,
     );
   }
 
@@ -104,6 +110,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     typeof body.format === "string" ? body.format : "web",
     days,
     auth.internal,
+    typeof body.mode === "string" ? body.mode : undefined,
   );
 }
 
@@ -165,6 +172,7 @@ async function respond(
   format: string,
   days: number,
   internal: boolean,
+  mode?: string,
 ) {
   let repoKey: string;
   try {
@@ -182,11 +190,14 @@ async function respond(
   );
   const ttlSec = parsePositiveInt(process.env.GOSSIP_CACHE_TTL_SEC, 600);
   const normalizedFormat = format.trim().toLowerCase() || "web";
+  const scoreMode = (mode ?? "").trim().toLowerCase() === "score";
+  // Cache key carries the effective surface ("score" vs tabloid format).
+  const cacheFormat = scoreMode ? "score" : normalizedFormat;
   const cacheKey = buildGossipCacheKey({
     repo: repoKey,
     days,
     offline,
-    format: normalizedFormat,
+    format: cacheFormat,
     byokFingerprint: byokFingerprint(env),
   });
 
@@ -201,7 +212,16 @@ async function respond(
   if (!enforceRateLimits(res, clientIp(req), repoKey, internal)) return;
 
   try {
-    const { tabloid, message, mode, llmError, warnings } = await runGossip({
+    if (scoreMode) {
+      const { score, message, missing } = await runScore({ repo, env });
+      const body = { kind: "score" as const, score, message, missing };
+      setGossipCache(cacheKey, { status: 200, body }, ttlSec);
+      res.setHeader("X-Cache", "MISS");
+      res.status(200).json(body);
+      return;
+    }
+
+    const { tabloid, message, mode: gossipMode, llmError, warnings } = await runGossip({
       repo,
       offline,
       sinceDays: days,
@@ -224,7 +244,7 @@ async function respond(
         warnings,
       };
     } else {
-      body = { tabloid, message, mode, llmError, warnings };
+      body = { tabloid, message, mode: gossipMode, llmError, warnings };
     }
 
     setGossipCache(cacheKey, { status: 200, body }, ttlSec);

@@ -16,8 +16,33 @@ export type {
 export { parseRepoRef, loadEnv, envSchema } from "./config.js";
 export type { Env } from "./config.js";
 
-export { runGossip, buildOfflineTabloid } from "./gossip.js";
-export type { GossipOptions, GossipMode } from "./gossip.js";
+export { runGossip, buildOfflineTabloid, runScore } from "./gossip.js";
+export type { GossipOptions, GossipMode, ScoreOptions } from "./gossip.js";
+
+export {
+  computeRepoScore,
+  formatScoreCard,
+  logScale,
+  ratioScale,
+  forkStarScore,
+  busFactorOf,
+  momentumOf,
+  gradeFor,
+  confidenceFromMissing,
+  SCORE_DIMENSION_WEIGHTS,
+} from "./score.js";
+export type {
+  RepoScoreInput,
+  RepoScore,
+  ScoreDimension,
+  ScoreDimensionId,
+  ScoreGradeId,
+  SanityCheck,
+  SanityLevel,
+} from "./score.js";
+
+export { fetchRepoScoreInput } from "./github-score.js";
+export type { RepoScoreFetchResult } from "./github-score.js";
 
 export {
   extractByokEnv,

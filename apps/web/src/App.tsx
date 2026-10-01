@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { TabloidView } from "./TabloidView";
+import { ScoreView } from "./ScoreView";
 import {
   formatSavedAt,
   loadHistoryFromStorage,
@@ -8,7 +9,7 @@ import {
   upsertHistoryInStorage,
 } from "./history";
 import { SAMPLE_TABLOID } from "./sample";
-import type { GossipMode, TabloidPayload } from "./types";
+import type { GossipMode, ScorePayload, TabloidPayload } from "./types";
 
 const EXAMPLES = ["sindresorhus/is", "facebook/react", "vercel/next.js"];
 
@@ -18,6 +19,8 @@ const MODE_LABEL: Record<GossipMode, string> = {
   fallback: "LLM 失败，已回退本地模板",
 };
 
+type Intent = "gossip" | "score";
+
 function isGossipMode(mode: unknown): mode is GossipMode {
   return mode === "llm" || mode === "offline" || mode === "fallback";
 }
@@ -26,9 +29,11 @@ export function App() {
   const [repo, setRepo] = useState("pbakaus/impeccable");
   const [days, setDays] = useState(14);
   const [useLlm, setUseLlm] = useState(true);
+  const [intent, setIntent] = useState<Intent>("gossip");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<TabloidPayload | null>(SAMPLE_TABLOID);
+  const [scoreData, setScoreData] = useState<ScorePayload | null>(null);
   const [isSample, setIsSample] = useState(true);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<HistoryEntry[]>(() =>
@@ -46,6 +51,7 @@ export function App() {
     setIsSample(false);
     setHistoryOpen(false);
     try {
+      const isScore = intent === "score";
       const res = await fetch("/api/gossip", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -53,13 +59,24 @@ export function App() {
           repo: trimmed,
           offline: !useLlm,
           days,
+          ...(isScore ? { mode: "score" } : {}),
         }),
       });
-      const json = (await res.json()) as TabloidPayload & { error?: string };
-      if (!res.ok) throw new Error(json.error || "八卦失败");
-      setData(json);
-      setRepo(trimmed);
-      setHistory(upsertHistoryInStorage(trimmed, json));
+      const json = (await res.json()) as
+        | (TabloidPayload & { error?: string; kind?: string })
+        | (ScorePayload & { error?: string });
+      if (!res.ok) throw new Error((json as { error?: string }).error || "请求失败");
+      if (isScore) {
+        if ((json as { kind?: string }).kind !== "score") {
+          throw new Error("评分响应格式异常");
+        }
+        setScoreData(json as ScorePayload);
+        setRepo(trimmed);
+      } else {
+        setData(json as TabloidPayload);
+        setRepo(trimmed);
+        setHistory(upsertHistoryInStorage(trimmed, json as TabloidPayload));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -71,6 +88,7 @@ export function App() {
     setError(null);
     setIsSample(true);
     setHistoryOpen(false);
+    setIntent("gossip");
     setData(SAMPLE_TABLOID);
   }
 
@@ -116,8 +134,31 @@ export function App() {
           gossip
         </h1>
         <p className="tagline">
-          丢进仓库链接，拿走一份项目八卦小报——不是 changelog，是气氛组。
+          丢进仓库链接，拿走一份项目八卦小报——或者一份含金量检定报告。
         </p>
+
+        <div className="intent-switch" role="tablist" aria-label="输出模式">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={intent === "gossip"}
+            className={`intent-chip${intent === "gossip" ? " is-active" : ""}`}
+            disabled={loading}
+            onClick={() => setIntent("gossip")}
+          >
+            📰 出报
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={intent === "score"}
+            className={`intent-chip${intent === "score" ? " is-active" : ""}`}
+            disabled={loading}
+            onClick={() => setIntent("score")}
+          >
+            🧪 验金
+          </button>
+        </div>
 
         <form className="compose" onSubmit={onSubmit}>
           <label className="sr-only" htmlFor="repo">
@@ -150,15 +191,20 @@ export function App() {
                 type="checkbox"
                 checked={useLlm}
                 onChange={(e) => setUseLlm(e.target.checked)}
+                disabled={intent === "score"}
               />
               调用 LLM
             </label>
             <button className="go" type="submit" disabled={loading}>
               {loading
-                ? useLlm
-                  ? "主编正在写稿…"
-                  : "正在翻提交簿…"
-                : "出报"}
+                ? intent === "score"
+                  ? "验金师正在称量…"
+                  : useLlm
+                    ? "主编正在写稿…"
+                    : "正在翻提交簿…"
+                : intent === "score"
+                  ? "验金"
+                  : "出报"}
             </button>
           </div>
         </form>
@@ -245,14 +291,33 @@ export function App() {
           <div className="loading-panel" role="status">
             <div className="spinner" />
             <p>
-              {useLlm
-                ? "编辑室连线 LLM，正在把提交写成八卦…"
-                : "编辑正在连夜翻 commit history…"}
+              {intent === "score"
+                ? "验金师正在称量 star、commit 与贡献者…"
+                : useLlm
+                  ? "编辑室连线 LLM，正在把提交写成八卦…"
+                  : "编辑正在连夜翻 commit history…"}
             </p>
           </div>
         )}
 
-        {!loading && data && (
+        {!loading && intent === "score" && scoreData && (
+          <>
+            {scoreData.missing.length > 0 && (
+              <p className="sample-banner warn-banner">
+                部分信号缺失,评分置信度受限:{scoreData.missing.join(" · ")}
+              </p>
+            )}
+            <ScoreView data={scoreData} />
+          </>
+        )}
+
+        {!loading && intent === "score" && !scoreData && (
+          <div className="loading-panel score-empty" role="note">
+            <p>丢一个仓库链接,点「验金」——五维含金量检定报告马上出炉。</p>
+          </div>
+        )}
+
+        {!loading && intent === "gossip" && data && (
           <>
             {isSample && (
               <p className="sample-banner">
@@ -280,8 +345,8 @@ export function App() {
       </main>
 
       <footer className="foot">
-        <span>默认调用 .env 里的 LLM · 可关掉「调用 LLM」用本地模板</span>
-        <span>CLI：npm run gossip -- owner/repo</span>
+        <span>出报走 LLM/本地模板 · 验金走纯数据评分,不调 LLM</span>
+        <span>CLI:npm run gossip -- owner/repo(加 --score 验金)</span>
       </footer>
     </div>
   );

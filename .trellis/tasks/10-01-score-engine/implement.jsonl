@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/core/backend/index.md", "reason": "core 开发前置清单"}
+{"file": ".trellis/spec/core/backend/pipeline.md", "reason": "管线与模式语义"}
+{"file": ".trellis/spec/core/backend/error-handling.md", "reason": "降级语义"}
+{"file": ".trellis/spec/core/backend/quality-guidelines.md", "reason": "质量规范"}
+{"file": ".trellis/spec/web/frontend/index.md", "reason": "Web 评分卡视图需遵循前端规范"}

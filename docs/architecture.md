@@ -30,6 +30,22 @@ repo URL
   → apps/web | apps/bot | api/* | apps/extension
 ```
 
+### Score pipeline（并行于 gossip 管线）
+
+```
+repo URL → runScore（gossip.ts）
+     → fetchRepoScoreInput（github-score.ts，≤13 次调用，除 repos.get 外逐路软失败 → missing 信号）
+        repos.get · /stats/commit_activity（202 重试）· listContributors（≤100）
+        Search×3（90d 合并 PR / 90d 关闭 issue / 开放 issue）· listReleases（90d）
+        getReadme · 根目录与 .github 目录清单（CONTRIBUTING/SECURITY，大小写宽容）· .github/workflows
+     → computeRepoScore（score.ts，纯函数：五维 = 影响力/活跃度/社区/工程/信用度，
+        子信号缺失 → 维度内权重重分配；维度缺失 → 五维间重分配；
+        置信度按 missing 扣减，下限 20；信用度 = 比例健全性检查扣分制）
+     → formatScoreCard → { score, message, missing }
+  入口：CLI --score · POST /api/gossip {mode:"score"} · Web「验金」
+  LLM 不参与评分（模板直出，防幻觉数字）。
+```
+
 ### Client-side history（不经服务端）
 
 | Surface | Store | Notes |

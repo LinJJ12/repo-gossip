@@ -657,3 +657,172 @@ select {
     transform: none;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* 验金评分卡 (score)                                                   */
+/* ------------------------------------------------------------------ */
+
+.intent-switch {
+  display: inline-flex;
+  gap: 0.4rem;
+  margin: 0 0 1rem;
+  padding: 0.25rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+}
+
+.intent-chip {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  padding: 0.35rem 1rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.intent-chip:hover {
+  color: var(--ink);
+}
+
+.intent-chip.is-active {
+  background: var(--lime);
+  color: #10130a;
+}
+
+.score-card {
+  border-color: rgba(214, 255, 60, 0.35);
+}
+
+.score-hero {
+  text-align: center;
+  padding: 1rem 0 1.25rem;
+  border-bottom: 1px dashed var(--line);
+}
+
+.score-total {
+  font-family: var(--font-display);
+  font-size: clamp(3rem, 9vw, 5rem);
+  line-height: 1;
+  margin: 0.5rem 0 0.25rem;
+  color: var(--lime);
+}
+
+.score-total-denom {
+  font-size: 0.35em;
+  color: var(--muted);
+}
+
+.score-grade {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  margin: 0 0 0.4rem;
+}
+
+.score-conf,
+.score-missing {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin: 0.15rem 0;
+}
+
+.score-missing {
+  color: var(--coral);
+}
+
+.score-dims {
+  display: grid;
+  gap: 1rem;
+  padding: 1.25rem 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.score-dim-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: var(--font-display);
+}
+
+.score-dim-value {
+  font-size: 1.1rem;
+  color: var(--teal);
+}
+
+.dim-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(242, 239, 230, 0.08);
+  overflow: hidden;
+  margin: 0.35rem 0 0.4rem;
+}
+
+.dim-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--teal), var(--lime));
+  transition: width 0.4s ease;
+}
+
+.score-dim-lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.score-dim-lines li {
+  display: inline;
+}
+
+.score-dim-lines li + li::before {
+  content: " · ";
+}
+
+.score-sanity-title {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+}
+
+.score-sanity ul {
+  margin: 0;
+  padding: 0 0 1rem;
+  list-style: none;
+  font-size: 0.85rem;
+}
+
+.score-sanity li {
+  padding: 0.2rem 0;
+}
+
+.sanity-fail {
+  color: var(--coral);
+}
+
+.sanity-warn {
+  color: var(--ink);
+}
+
+.sanity-unknown {
+  color: var(--muted);
+}
+
+.score-foot {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.score-empty p {
+  color: var(--muted);
+}

@@ -21,6 +21,7 @@
 | **项目体温** | 活跃度一眼可读 |
 | **提交信翻译** | commit message → 八卦文案 |
 | **彩蛋侦探** | 可疑调试痕迹等梗 |
+| **🧪 含金量检定** | 五维评分（影响力/活跃度/社区/工程/信用度）+ 等级 + 置信度 + 逐项证据 |
 
 没有 LLM 也能出报：CLI 加 `--offline`，Web / 扩展关掉「调用 LLM」或勾选「仅本地模板」。
 
@@ -70,6 +71,7 @@ npm run web:build    # 生产构建
 ```
 
 - 可调回溯天数、是否调用 LLM
+- 顶部「出报 / 验金」切换：验金走纯数据评分（不调 LLM），出报走八卦小报
 - 请求走同源 `/api/gossip`（开发时由 Vite 中间件提供）
 - 出报成功后可点 **「最近」**，在本机回看缓存小报（`localStorage`，最多 20 条；与扩展不同步）
 
@@ -79,7 +81,10 @@ npm run web:build    # 生产构建
 npm run gossip -- owner/repo
 npm run gossip -- https://github.com/owner/repo --days 14
 npm run gossip -- owner/repo --offline
+npm run gossip -- owner/repo --score   # 🧪 含金量检定（纯数据，不调 LLM）
 ```
+
+`--score` 输出五维评分卡：总分（0-100）· 等级（足金/K金/镀金/掺水/贴纸）· 置信度 · 每个维度的证据行。评分基于 `repos.get`、`/stats/commit_activity`、贡献者、Search API 计数等 ≤13 次调用，单路失败自动降级并标注「缺失信号」。
 
 ### Chrome 扩展
 
@@ -140,6 +145,7 @@ curl -X POST https://<domain>/api/gossip \
 | `format` | `web`（默认）· `markdown` · `json` · `discord` · `feishu` |
 | `days` | 1–90 |
 | `offline` | `true` 时不调 LLM |
+| `mode` | `score` 时返回含金量评分卡 `{kind:"score", score, message, missing}` |
 
 可选 **BYOK** 请求头（优先于服务端环境变量，不落日志 / 响应体）：
 

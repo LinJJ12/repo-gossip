@@ -2,7 +2,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as loadDotenv } from "dotenv";
-import { runGossip } from "./gossip.js";
+import { runGossip, runScore } from "./gossip.js";
 
 loadDotenv({
   path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../.env"),
@@ -17,6 +17,7 @@ Usage:
 Options:
   --offline          skip LLM, use local templates
   --days <n>         lookback days (default 14)
+  --score            含金量评分模式(输出评分卡,不调 LLM)
   --json             print raw JSON
   -h, --help         help
 `);
@@ -60,6 +61,21 @@ async function main() {
   const sinceDays = Number(kv.get("days") ?? "14");
   const offline = flags.has("--offline");
   const json = flags.has("--json");
+  const score = flags.has("--score");
+
+  if (score) {
+    console.error(`Scoring ${repo}...`);
+    const { score: repoScore, message, missing } = await runScore({ repo });
+    if (missing.length > 0) {
+      console.error(`[missing signals] ${missing.join(", ")}`);
+    }
+    if (json) {
+      console.log(JSON.stringify(repoScore, null, 2));
+    } else {
+      console.log(message.markdown);
+    }
+    return;
+  }
 
   console.error(`Fetching gossip for ${repo}...`);
 
