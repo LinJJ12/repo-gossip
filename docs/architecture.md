@@ -81,10 +81,17 @@ call only and must never be logged or echoed.
 - Kill-switch: `GOSSIP_REQUIRE_WEBHOOK_SECRET=1` restores the old “require secret in production”
   behavior.
 - CORS: `OPTIONS` + `GOSSIP_CORS_ORIGINS` (comma-separated) or `*` for `Access-Control-Allow-Origin`.
+- All gossip/badge business logic (routing, validation, auth, rate limit, cache, 500 sanitization)
+  lives in core `http-api.ts`; `api/*.ts` and the Vite dev middleware are thin protocol adapters.
 - In-process rate limits (`GOSSIP_RATE_LIMIT_*_PER_HOUR`) and TTL cache (`GOSSIP_CACHE_TTL_SEC`);
   multi-instance deployments do not share this state. Internal Bearer calls skip the IP bucket.
   Cache is checked **before** rate-limit consume; keys include `format`. Responses may include
   `X-Cache: HIT|MISS` and `429` + `Retry-After` when limited. `days` is clamped to 1–90.
+- `/api/badge` has its own IP bucket (`GOSSIP_RATE_LIMIT_BADGE_PER_HOUR`, default 60/h): each cache
+  miss costs 11–15 GitHub API calls. Rate-limited and failed badge requests still return HTTP 200
+  with the gray N/A SVG (README images never break); limited responses use `Cache-Control: no-store`
+  so the CDN cannot poison the real badge.
+- 500 responses are sanitized to `{"error":"internal error"}`; details go to server logs only.
 - BYOK `x-llm-base-url` must pass `isAllowedLlmBaseUrl` (blocks cloud metadata / non-http(s)).
 
 Production checklist:
