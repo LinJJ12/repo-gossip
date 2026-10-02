@@ -29,9 +29,13 @@ export async function startDiscordBot(
     intents: [GatewayIntentBits.Guilds],
   });
 
-  client.once(Events.ClientReady, async (c) => {
+  client.once(Events.ClientReady, (c) => {
     console.log(`Discord 已上线:${c.user.tag}`);
-    await registerCommands(token, c.user.id);
+    // 命令注册失败(如 token/clientId 错误)不能变成未处理拒绝杀死进程。
+    registerCommands(token, c.user.id).catch((err) => {
+      console.error("Discord 斜杠命令注册失败:", err);
+      process.exitCode = 1;
+    });
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {
@@ -154,7 +158,8 @@ async function handleGossip(
       ...(warnings ?? []),
     ]
       .filter(Boolean)
-      .join(" · ");
+      .join(" · ")
+      .slice(0, MAX_DISCORD_TEXT);
     await interaction.editReply({
       content: notes || undefined,
       embeds: [embed],

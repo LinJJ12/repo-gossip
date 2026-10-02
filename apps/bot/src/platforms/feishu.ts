@@ -24,13 +24,21 @@ export type FeishuEvent = {
   };
 };
 
+/** 鉴权失败用专门错误类型承载,适配层据此返回 401(而非 500)。 */
+export class FeishuAuthError extends Error {
+  constructor(message = "feishu verification token mismatch") {
+    super(message);
+    this.name = "FeishuAuthError";
+  }
+}
+
 export function handleFeishuChallenge(
   body: FeishuEvent,
   verificationToken?: string,
 ): { challenge: string } | null {
   if (body.type === "url_verification" && body.challenge) {
     if (verificationToken && body.token !== verificationToken) {
-      throw new Error("feishu verification token mismatch");
+      throw new FeishuAuthError();
     }
     return { challenge: body.challenge };
   }
@@ -49,6 +57,26 @@ function resolveReceiveTarget(body: FeishuEvent): ReceiveTarget | null {
   return null;
 }
 
+// 飞书事件投递是 at-least-once:同一条 message_id 的重放不去重会重复跑完整管线
+// (GitHub + LLM 开销、限流额度)。进程内保留最近 500 条即可覆盖重放窗口。
+const seenMessageIds = new Set<string>();
+const SEEN_MESSAGE_IDS_MAX = 500;
+
+function isDuplicateMessage(body: FeishuEvent): boolean {
+  const messageId = body.event?.message?.message_id;
+  if (!messageId) return false;
+  if (seenMessageIds.has(messageId)) return true;
+  seenMessageIds.add(messageId);
+  if (seenMessageIds.size > SEEN_MESSAGE_IDS_MAX) {
+    // 简单淘汰:清掉一半,保持常量内存。
+    for (const id of seenMessageIds) {
+      seenMessageIds.delete(id);
+      if (seenMessageIds.size <= SEEN_MESSAGE_IDS_MAX / 2) break;
+    }
+  }
+  return false;
+}
+
 export async function handleFeishuMessage(
   body: FeishuEvent,
   options: {
@@ -59,6 +87,7 @@ export async function handleFeishuMessage(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const contentRaw = body.event?.message?.content;
   if (!contentRaw) return { ok: true };
+  if (isDuplicateMessage(body)) return { ok: true };
 
   let text = "";
   try {

@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { Bot, webhookCallback } from "grammy";
+import { secretEqual } from "../packages/core/src/index.js";
 import { createTelegramBot } from "../apps/bot/src/platforms/telegram.js";
 
 let bot: Bot | null = null;
@@ -29,7 +30,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (secret) {
       const header = req.headers["x-telegram-bot-api-secret-token"];
-      if (header !== secret) {
+      const provided = Array.isArray(header) ? header[0] : header;
+      if (typeof provided !== "string" || !secretEqual(provided, secret)) {
         res.status(401).json({ error: "invalid telegram secret" });
         return;
       }
@@ -38,9 +40,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const handle = webhookCallback(getBot(), "https");
     await handle(req, res);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({
-      error: err instanceof Error ? err.message : String(err),
-    });
+    // 与 core http-api 同口径:500 统一脱敏,细节只进服务端日志。
+    console.error("[api/telegram] internal error:", err);
+    res.status(500).json({ error: "internal error" });
   }
 }

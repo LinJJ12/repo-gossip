@@ -1,21 +1,18 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { secretEqual } from "../packages/core/src/index.js";
 import {
   handleFeishuChallenge,
   handleFeishuMessage,
+  FeishuAuthError,
   type FeishuEvent,
 } from "../apps/bot/src/platforms/feishu.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
-    return;
-  }
-
-  const body = req.body as FeishuEvent;
-  const verificationToken = process.env.FEISHU_VERIFICATION_TOKEN;
-  const isProd = Boolean(process.env.VERCEL || process.env.NODE_ENV === "production");
-
   try {
+    const body = req.body as FeishuEvent;
+    const verificationToken = process.env.FEISHU_VERIFICATION_TOKEN;
+    const isProd = Boolean(process.env.VERCEL || process.env.NODE_ENV === "production");
+
     if (isProd && !verificationToken) {
       res.status(500).json({
         error: "FEISHU_VERIFICATION_TOKEN is required in production",
@@ -31,7 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (verificationToken) {
       const token = body.token ?? body.header?.token;
-      if (token !== verificationToken) {
+      if (typeof token !== "string" || !secretEqual(token, verificationToken)) {
         res.status(401).json({ error: "invalid feishu token" });
         return;
       }
@@ -51,8 +48,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
     res.status(200).json(result);
   } catch (err) {
-    res.status(500).json({
-      error: err instanceof Error ? err.message : String(err),
-    });
+    if (err instanceof FeishuAuthError) {
+      res.status(401).json({ error: "invalid feishu token" });
+      return;
+    }
+    // 与 core http-api 同口径:500 统一脱敏,细节只进服务端日志。
+    console.error("[api/feishu] internal error:", err);
+    res.status(500).json({ error: "internal error" });
   }
 }

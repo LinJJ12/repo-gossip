@@ -1,5 +1,6 @@
 import { Bot, InlineKeyboard } from "grammy";
 import {
+  LOOSE_REPO_PATTERN,
   matchLooseRepo,
   parseCompareRepos,
   runCompare,
@@ -92,7 +93,8 @@ function guardUser(ctx: {
   const userId = ctx.from?.id != null ? String(ctx.from.id) : "unknown";
   const guard = consumeBotUserLimit(userId);
   if (!guard.ok) {
-    void ctx.reply(busyReplyText(guard.retryAfterSec));
+    // 不能 fire-and-forget:Telegram API 失败会变成未处理拒绝杀死常驻进程。
+    ctx.reply(busyReplyText(guard.retryAfterSec)).catch(() => {});
     return false;
   }
   return true;
@@ -104,10 +106,11 @@ export function parseGossipArgs(
 ): { repo: string; days: number; offline: boolean } | null {
   const offline = /\s--offline\b/i.test(arg) || defaultOffline;
   const cleaned = arg.replace(/\s--offline\b/i, "").trim();
-  const repo = matchLooseRepo(cleaned);
-  if (!repo) return null;
-  const idx = cleaned.indexOf(repo) + repo.length;
-  const rest = cleaned.slice(idx).trim();
+  const m = cleaned.match(LOOSE_REPO_PATTERN);
+  if (!m) return null;
+  const repo = m[1]!;
+  // 用正则命中的结束位置切尾参,避免 repo 字符串在文本里更早出现时错切。
+  const rest = cleaned.slice(m.index! + m[0].length).trim();
   const daysMatch = rest.match(/^(\d{1,2})\b/);
   let days = 14;
   if (daysMatch) {
