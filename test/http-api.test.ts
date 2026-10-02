@@ -202,14 +202,40 @@ describe("handleGossipApiRequest · 各模式与缓存", () => {
     assert.equal(calls.gossip, 1);
   });
 
-  it("markdown format 输出 markdown 字段", async () => {
+  it("markdown format 输出 markdown 字段,mode 为实际执行模式", async () => {
     const calls: { gossip?: number } = {};
     const res = await handleGossipApiRequest(
       postReq('{"repo":"a/b","format":"markdown","offline":true}'),
       fakeDeps(calls),
     );
-    const body = JSON.parse(res.body) as { markdown: string };
+    const body = JSON.parse(res.body) as { markdown: string; mode: string };
     assert.match(body.markdown, /^\*\*md\*\*/);
+    assert.equal(body.mode, "offline");
+  });
+
+  it("POST days 数字字符串与 number 等价(同一缓存键)", async () => {
+    const calls: { gossip?: number } = {};
+    const deps = fakeDeps(calls);
+    await handleGossipApiRequest(
+      postReq('{"repo":"a/b","offline":true,"days":"30"}'),
+      deps,
+    );
+    const second = await handleGossipApiRequest(
+      postReq('{"repo":"a/b","offline":true,"days":30}'),
+      deps,
+    );
+    assert.equal(second.headers["X-Cache"], "HIT");
+    assert.equal(calls.gossip, 1);
+  });
+
+  it("POST offline 接受字符串 \"true\"", async () => {
+    const calls: { gossip?: number } = {};
+    const res = await handleGossipApiRequest(
+      postReq('{"repo":"a/b","offline":"true"}'),
+      fakeDeps(calls),
+    );
+    assert.equal(res.status, 200);
+    assert.match(res.body, /"mode":"offline"/);
   });
 
   it("第二次相同请求命中缓存,不消耗 runner、不消耗 IP 限额", async () => {

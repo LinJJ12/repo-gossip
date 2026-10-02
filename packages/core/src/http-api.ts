@@ -179,7 +179,7 @@ export async function handleGossipApiRequest(
     return respondGossip(
       {
         repo,
-        offline: url.searchParams.get("offline") === "1",
+        offline: ["1", "true"].includes(url.searchParams.get("offline") ?? ""),
         format: url.searchParams.get("format") ?? "web",
         days: clampGossipDays(Number(url.searchParams.get("days") ?? "14")),
         mode: url.searchParams.get("mode") ?? undefined,
@@ -202,7 +202,7 @@ export async function handleGossipApiRequest(
 
   if (
     typeof req.bodyText === "string" &&
-    req.bodyText.length > MAX_BODY_BYTES
+    Buffer.byteLength(req.bodyText) > MAX_BODY_BYTES
   ) {
     return json(413, { error: "body too large" }, cors);
   }
@@ -238,15 +238,17 @@ export async function handleGossipApiRequest(
     );
   }
 
-  const daysRaw =
-    typeof body.days === "number" && Number.isFinite(body.days)
-      ? body.days
-      : 14;
+  // days 接受 number 或数字字符串("30");offline 接受 boolean / "1" / "true"。
+  const daysRaw = toFiniteNumber(body.days) ?? 14;
+  const offline =
+    body.offline === true ||
+    body.offline === "1" ||
+    body.offline === "true";
 
   return respondGossip(
     {
       repo: str(body.repo) ?? "",
-      offline: Boolean(body.offline),
+      offline,
       format: str(body.format) ?? "web",
       days: clampGossipDays(daysRaw),
       mode: str(body.mode),
@@ -260,6 +262,15 @@ export async function handleGossipApiRequest(
     req.headers,
     cors,
   );
+}
+
+function toFiniteNumber(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
 }
 
 function authorize(
@@ -415,12 +426,20 @@ async function respondGossip(
       body = {
         markdown: message.markdown,
         plain: message.plain,
-        mode: intent.mode,
-        llmError,
+        // 实际执行模式(llm/offline/fallback),便于消费方识别降级。
+        mode: gossipMode,
+        llmError: sanitizeLlmError(llmError, internal || Boolean(env.LLM_API_KEY)),
         warnings,
       };
     } else {
-      body = { tabloid, message, mode: gossipMode, llmError, warnings };
+      body = {
+        tabloid,
+        message,
+        mode: gossipMode,
+        // 服务端 Key 的上游 LLM 错误细节不外泄;BYOK/内部调用保留(用户排障需要)。
+        llmError: sanitizeLlmError(llmError, internal || Boolean(env.LLM_API_KEY)),
+        warnings,
+      };
     }
 
     setGossipCache(cacheKey, { status: 200, body }, ttlSec);
@@ -428,6 +447,16 @@ async function respondGossip(
   } catch (err) {
     return internalError(err, "api/gossip");
   }
+}
+
+/** 服务端 Key 模式下,上游 LLM 错误细节(状态码/响应体片段)不对公开客户端外泄。 */
+function sanitizeLlmError(
+  llmError: string | undefined,
+  mayShowDetail: boolean,
+): string | undefined {
+  if (!llmError) return undefined;
+  if (mayShowDetail) return llmError;
+  return "LLM 暂不可用,已回落本地模板";
 }
 
 function enforceRateLimits(
@@ -509,7 +538,8 @@ export async function handleBadgeApiRequest(
       ? "en"
       : "zh";
 
-  const ttlSec = Number(process.env.GOSSIP_CACHE_TTL_SEC) || 600;
+  // 与 gossip 路径同口径解析(0 = 关闭缓存),不再强制 ≥600s。
+  const ttlSec = parsePositiveInt(process.env.GOSSIP_CACHE_TTL_SEC, 600);
   const cacheKey = buildGossipCacheKey({
     repo: `${locale}|${repoRef}`,
     days: 0,
@@ -560,7 +590,7 @@ export async function handleBadgeApiRequest(
   try {
     const { score } = await doScore({ repo: repoRef, locale });
     const svg = formatBadgeSvg(score, locale);
-    setGossipCache(cacheKey, { status: 200, body: svg }, Math.max(ttlSec, 600));
+    setGossipCache(cacheKey, { status: 200, body: svg }, ttlSec);
     return {
       status: 200,
       headers: { ...baseHeaders, "X-Cache": "MISS" },

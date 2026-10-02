@@ -121,7 +121,11 @@ export function formatCompareRadarSvg(
   const cy = size / 2 + 6;
   const r = size / 2 - 34;
   const esc = (s: string) =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
 
   // 从第一个成功评分的条目取维度元信息(标签/emoji 与单仓库评分卡一致)。
   const metaSource = entries.find((e) => e.score !== null)?.score;
@@ -183,9 +187,10 @@ export function formatCompareRadarSvg(
 </svg>`;
 }
 
-/** 规范化对比入参:逗号/空白分隔,去空,限量。超量抛错(带用量提示)。 */
+/** 规范化对比入参:逗号/空白分隔(字符串或数组逐元素均可),去空,限量。超量抛错(带用量提示)。 */
 export function parseCompareRepos(raw: string | string[]): string[] {
-  const parts = (Array.isArray(raw) ? raw : raw.split(/[,，\s]+/))
+  const parts = (Array.isArray(raw) ? raw : [raw])
+    .flatMap((s) => s.split(/[,，\s]+/))
     .map((s) => s.trim())
     .filter((s) => s !== "");
   if (parts.length < COMPARE_MIN) {

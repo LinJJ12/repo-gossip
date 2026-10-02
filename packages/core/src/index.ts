@@ -83,6 +83,7 @@ export {
   decideWebhookAuth,
   resolveCorsAllowOrigin,
   isAllowedLlmBaseUrl,
+  secretEqual,
   GOSSIP_CORS_ALLOW_HEADERS,
   GOSSIP_CORS_ALLOW_METHODS,
 } from "./byok.js";

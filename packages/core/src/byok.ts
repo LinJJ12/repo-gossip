@@ -92,6 +92,19 @@ export function extractWebhookCredential(
   return undefined;
 }
 
+/**
+ * Constant-time-ish secret comparison (no node:crypto — this module is bundled
+ * into the browser build too). Length-independent early-exit is avoided.
+ */
+export function secretEqual(a: string, b: string): boolean {
+  const max = Math.max(a.length, b.length);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < max; i++) {
+    diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  }
+  return diff === 0;
+}
+
 export type WebhookAuthDecisionInput = {
   secret: string | undefined;
   /** From extractWebhookCredential; undefined = no auth header sent */
@@ -127,7 +140,7 @@ export function decideWebhookAuth(
       }
       return { ok: true, internal: false };
     }
-    if (provided !== secret) {
+    if (provided === undefined || !secretEqual(provided, secret)) {
       return { ok: false, status: 401, error: "unauthorized" };
     }
     return { ok: true, internal: true };
@@ -141,7 +154,7 @@ export function decideWebhookAuth(
   if (provided === undefined) {
     return { ok: true, internal: false };
   }
-  if (provided !== secret) {
+  if (!secretEqual(provided, secret)) {
     return { ok: false, status: 401, error: "unauthorized" };
   }
   return { ok: true, internal: true };

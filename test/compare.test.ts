@@ -90,6 +90,16 @@ describe("parseCompareRepos", () => {
   });
 });
 
+describe("formatCompareRadarSvg", () => {
+  it("ariaLabel 注入属性前转义引号(供 dangerouslySetInnerHTML 消费)", () => {
+    const svg = formatCompareRadarSvg(sampleEntries(), {
+      ariaLabel: '含金量"对比雷达 onmouseover="x',
+    });
+    assert.ok(!svg.includes('aria-label="含金量"对比'));
+    assert.ok(svg.includes("&quot;"));
+  });
+});
+
 describe("formatCompareTable", () => {
   it("zh:表头/总分/维度/含水量/置信度齐备", () => {
     const { markdown } = formatCompareTable(sampleEntries());

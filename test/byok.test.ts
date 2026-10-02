@@ -191,3 +191,13 @@ describe("resolveCorsAllowOrigin", () => {
     );
   });
 });
+
+describe("secretEqual", () => {
+  it("等长相同/不同与长度差异均正确判定", async () => {
+    const { secretEqual } = await import("../packages/core/src/byok.js");
+    assert.equal(secretEqual("s3cret", "s3cret"), true);
+    assert.equal(secretEqual("s3cret", "s3cerT"), false);
+    assert.equal(secretEqual("short", "longer-secret"), false);
+    assert.equal(secretEqual("", ""), true);
+  });
+});
