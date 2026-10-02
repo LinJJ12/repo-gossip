@@ -33,7 +33,11 @@ async function main() {
   if (telegramToken) {
     const bot = createTelegramBot(telegramToken, { offline });
     console.log("Telegram Bot 开始轮询…");
-    void bot.start();
+    // bot.start 在轮询异常/断连结束时 reject,不能静默吞掉。
+    bot.start().catch((err) => {
+      console.error("Telegram Bot 轮询异常退出:", err);
+      process.exitCode = 1;
+    });
   }
 }
 
