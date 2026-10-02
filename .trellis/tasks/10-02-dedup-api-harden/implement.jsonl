@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/core/backend/index.md", "reason": "core 层开发清单与新导出规范:业务逻辑进 core、index.ts 导出、typecheck+test 门槛"}
+{"file": ".trellis/spec/bot/backend/index.md", "reason": "bot 平台适配层规范:平台文件只解析输入并回复、密钥 fail-closed"}
+{"file": ".trellis/spec/web/frontend/index.md", "reason": "web 层规范:中间件只做协议转换、types 镜像 core、质量检查项"}
+{"file": ".trellis/spec/bot/backend/error-handling.md", "reason": "用户可见失败与 HTTP 状态码口径,500 脱敏需对齐"}
+{"file": ".trellis/spec/core/backend/error-handling.md", "reason": "core 抛错 vs 降级的既有口径,http-api 错误映射需一致"}
