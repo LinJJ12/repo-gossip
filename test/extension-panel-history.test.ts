@@ -89,19 +89,27 @@ describe("extension history-logic", () => {
   });
 
   it("normalizeHistoryList merges case variants and drops corrupt rows", () => {
+    // 单源后的严格语义:无 analyzable tabloid(analyzed 缺失)的行按脏数据丢弃。
     const list = normalizeHistoryList([
       null,
       { repo: "a/b" },
       {
         repo: "Owner/Repo",
         savedAt: 1,
-        data: { message: { plain: "old" } },
+        data: {
+          message: { plain: "old" },
+          tabloid: { analyzed: { snapshot: { fullName: "Owner/Repo" } } },
+        },
       },
       {
         repo: "owner/repo",
         savedAt: 2,
-        data: { message: { plain: "new" } },
+        data: {
+          message: { plain: "new" },
+          tabloid: { analyzed: { snapshot: { fullName: "owner/repo" } } },
+        },
       },
+      { repo: "junk/data", savedAt: 3, data: { message: { plain: "x" } } },
       { repo: "", data: {} },
       "nope",
     ]);
@@ -167,7 +175,7 @@ describe("extension history-logic", () => {
     const slim = slimGossipData({
       message: { plain: "p" },
       warnings: "not-an-array",
-      tabloid: { epicTitle: "t" },
+      tabloid: { epicTitle: "t", analyzed: { snapshot: {} } },
     });
     assert.equal(slim.warnings, undefined);
     assert.equal(slim.message.plain, "p");
