@@ -137,6 +137,8 @@ npm run gossip -- owner/a owner/b --compare        # 2-4 个仓库对比(--lang 
 2. 本地轮询:`TELEGRAM_BOT_TOKEN=xxx npm run bot`
 3. 或 Webhook:`https://<域名>/api/telegram`(建议同时设 `TELEGRAM_WEBHOOK_SECRET`)
 
+命令:`/gossip owner/repo` · `/score owner/repo` · `/compare owner/a owner/b`,或直接发 GitHub 链接。
+
 </details>
 
 <details>
@@ -146,7 +148,7 @@ npm run gossip -- owner/a owner/b --compare        # 2-4 个仓库对比(--lang 
 DISCORD_BOT_TOKEN=xxx npm run bot
 ```
 
-斜杠命令:`/gossip repo:owner/repo`
+斜杠命令:`/gossip repo:owner/repo` · `/score repo:owner/repo` · `/compare repos:"owner/a owner/b"`
 
 > `/api/discord` Interactions Webhook 仍为 **501**。请用常驻 Bot,不要配置 Interactions Endpoint。
 
@@ -157,6 +159,7 @@ DISCORD_BOT_TOKEN=xxx npm run bot
 
 - 事件订阅:`https://<域名>/api/feishu`
 - 配置:`FEISHU_APP_ID` / `FEISHU_APP_SECRET` / `FEISHU_VERIFICATION_TOKEN`
+- 命令:发 `score <仓库>`(验金)、`compare <仓库1> <仓库2>`(对比),或直接发仓库链接出小报
 
 </details>
 
@@ -189,7 +192,7 @@ curl -X POST https://<domain>/api/gossip \
 
 内部调用可带 `Authorization: Bearer $WEBHOOK_SECRET` 或 `x-webhook-secret`。公开路径有进程内限流与短时缓存。
 
-**README 徽章**:把下面这行放进任意项目 README,实时展示其含金量(失败输出灰色 N/A,永不破图;`?lang=en` 英文):
+**README 徽章**:把下面这行放进任意项目 README,实时展示其含金量(失败/限流均输出灰色 N/A,永不破图;`?lang=en` 英文;服务端对单 IP 独立限流,防止枚举烧穿 GitHub 配额):
 
 ```md
 ![含金量](https://<你的部署域名>/api/badge/<owner>/<repo>.svg)
@@ -209,7 +212,8 @@ curl -X POST https://<domain>/api/gossip \
 | `WEBHOOK_SECRET` | 内部调用校验(可选) |
 | `GOSSIP_REQUIRE_WEBHOOK_SECRET` | `1` 时生产强制鉴权 |
 | `GOSSIP_CORS_ORIGINS` | CORS,逗号分隔或 `*` |
-| `GOSSIP_RATE_LIMIT_*` · `GOSSIP_CACHE_TTL_SEC` | 限流与缓存 |
+| `GOSSIP_RATE_LIMIT_*` · `GOSSIP_CACHE_TTL_SEC` | 限流与缓存(`GOSSIP_RATE_LIMIT_IP_PER_HOUR` / `_REPO_PER_HOUR` / `_BADGE_PER_HOUR`,徽章端点独立限流) |
+| `GOSSIP_BOT_USER_RATE_LIMIT` | Bot 每用户命令限速(每 10 分钟次数,默认 12,0 不限) |
 
 Bot 相关变量见 `.env.example` 注释。
 
@@ -233,13 +237,13 @@ flowchart LR
 
 ```text
 repo-gossip/
-├── packages/core/     # 引擎:github · github-score · score · watermark · compare · analyzer · llm · format · CLI
+├── packages/core/     # 引擎:github · github-score · score · watermark · compare · analyzer · llm · format · http-api · CLI
 ├── apps/
 │   ├── web/           # Vite + React 预览站(出报 / 验金 / 对比,含本机「最近」)
-│   ├── bot/           # Discord / Telegram / 飞书
+│   ├── bot/           # Discord / Telegram / 飞书(gossip · score · compare)
 │   └── extension/     # Chrome MV3(sideload)
-├── api/               # Vercel Serverless(gossip · badge)
-├── test/              # 单测(174 例)
+├── api/               # Vercel Serverless(gossip · badge —— 仅协议转换,业务在 core)
+├── test/              # 单测(197 例)
 ├── docs/              # 架构说明与图片资产
 └── package.json
 ```

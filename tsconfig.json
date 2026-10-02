@@ -5,8 +5,22 @@
     "moduleResolution": "NodeNext",
     "strict": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@repo-gossip/core": [
+        "packages/core/src/index.ts"
+      ]
+    }
   },
-  "include": ["api/**/*.ts", "test/**/*.ts"],
-  "exclude": ["node_modules", "dist", "apps", "packages"]
+  "include": [
+    "api/**/*.ts",
+    "test/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "apps",
+    "packages"
+  ]
 }

@@ -11,7 +11,8 @@ packages/core/src/
 ├── analyzer.ts   # Pure analysis: temperature, awards, easter eggs
 ├── llm.ts        # Chat Completions + local dramatize / normalizeTranslations
 ├── format.ts     # PlatformMessage + Discord embed + Feishu card
-├── gossip.ts     # Orchestrator: runGossip, buildOfflineTabloid
+├── gossip.ts     # Orchestrator: runGossip, runScore, runCompare
+├── http-api.ts   # Framework-agnostic /api/gossip + /api/badge handler (auth/limit/cache/sanitize)
 └── cli.ts        # CLI bin; loads repo-root .env
 ```
 
@@ -26,6 +27,7 @@ packages/core/src/
 | `llm.ts` | Prompt, parse, local rewrite | Octokit |
 | `format.ts` | Markdown/plain + platform payloads | Fetch |
 | `gossip.ts` | End-to-end orchestration | Platform SDK (discord.js etc.) |
+| `http-api.ts` | HTTP routing, validation, auth, rate limit, cache, 500 sanitization | Platform request/response objects (Vercel/Connect) |
 | `cli.ts` | argv + dotenv + print | Business rules beyond flags |
 
 ## Import / export conventions
@@ -37,4 +39,10 @@ packages/core/src/
 ## Related non-package code
 
 - Root `api/` and `apps/*` are **adapters**; they call core, they do not reimplement analysis or LLM.
+- `/api/gossip` + `/api/badge` business logic lives ONLY in `http-api.ts` — Vercel handlers and the Vite dev
+  middleware are protocol adapters (≤40 lines). Never grow a second implementation in `apps/web/vite.config.ts`.
+- Adapter layers must not hand-copy rendering geometry from core (radar SVG, GRADE_COLORS) — import the exported
+  functions instead.
+- Score rubric tuning happens in `score.ts` `SCORE_RUBRIC` (grade cutoffs, confidence floor, sanity star gates);
+  behavior is pinned by `test/score.test.ts`.
 - Root `test/` covers core units with `node:test` + `tsx`.

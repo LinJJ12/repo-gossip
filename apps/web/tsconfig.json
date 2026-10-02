@@ -9,7 +9,12 @@
     "skipLibCheck": true,
     "noEmit": true,
     "isolatedModules": true,
-    "types": ["vite/client"]
+    "types": ["vite/client", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "@repo-gossip/core": ["../../packages/core/src/index.ts"],
+      "@repo-gossip/core/github-links": ["../../packages/core/src/github-links.ts"]
+    }
   },
   "include": ["src"]
 }

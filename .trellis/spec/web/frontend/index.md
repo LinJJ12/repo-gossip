@@ -3,7 +3,7 @@
 Vite + React 19 preview site for tabloid gossip. Brand-first dark editorial UI.
 
 **Package path**: `apps/web`  
-**Dev**: `npm run web` (port 5173; Vite middleware implements `/api/gossip`)
+**Dev**: `npm run web` (port 5173; Vite middleware is a thin protocol adapter over core `handleGossipApiRequest` / `handleBadgeApiRequest`)
 
 ---
 
@@ -11,6 +11,7 @@ Vite + React 19 preview site for tabloid gossip. Brand-first dark editorial UI.
 
 - [ ] Keep brand `repo/gossip` as the hero signal; form is the primary interaction
 - [ ] Call `/api/gossip` for live data; do not reimplement analyzer/LLM in the browser
+- [ ] Reuse core rendering (radar SVG via `formatCompareRadarSvg`, `GRADE_COLORS`) instead of copying geometry
 - [ ] Mirror core `Tabloid` / mode fields in `src/types.ts` when core shapes change
 - [ ] Secrets stay server-side (Vite loads root `.env` only for the gossip middleware)
 
