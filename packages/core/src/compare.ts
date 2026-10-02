@@ -1,5 +1,6 @@
 import type { PlatformMessage, ScoreLocale } from "./types.js";
 import type { RepoScore, ScoreDimensionId } from "./score.js";
+import { SCORE_DIMENSION_ORDER } from "./score.js";
 import { GRADE_COLORS } from "./badge.js";
 
 /**
@@ -18,13 +19,7 @@ export type CompareEntry = {
   error?: string;
 };
 
-const DIM_ORDER: ScoreDimensionId[] = [
-  "influence",
-  "activity",
-  "community",
-  "engineering",
-  "credibility",
-];
+const DIM_ORDER = SCORE_DIMENSION_ORDER;
 
 const STR = {
   compareTitle: { zh: "含金量对比", en: "Gold Comparison" },
@@ -115,10 +110,11 @@ function polarY(cy: number, r: number, angleDeg: number): number {
 /**
  * 五维雷达 SVG(零依赖):同心五边形网格 + 每仓库一个多边形(等级配色)。
  * 维度标签取自首个成功评分的条目(已按 locale 本地化);null 分按 0 处理。
+ * web 与 CLI/serverless 共用此实现(不要在适配层重写几何)。
  */
 export function formatCompareRadarSvg(
   entries: CompareEntry[],
-  options?: { size?: number },
+  options?: { size?: number; ariaLabel?: string },
 ): string {
   const size = options?.size ?? 260;
   const cx = size / 2;
@@ -180,7 +176,9 @@ export function formatCompareRadarSvg(
     })
     .join("");
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="gold comparison radar">
+  const ariaLabel = options?.ariaLabel ?? "gold comparison radar";
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="${esc(ariaLabel)}">
 <g>${gridPolygons.join("")}${axisLines}${axisLabels}${series}</g>
 </svg>`;
 }

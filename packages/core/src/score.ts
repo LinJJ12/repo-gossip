@@ -108,6 +108,15 @@ export const SCORE_DIMENSION_WEIGHTS: Record<ScoreDimensionId, number> = {
   credibility: 0.2,
 };
 
+/** 五维展示顺序(表格行序 / 雷达轴序的唯一来源)。 */
+export const SCORE_DIMENSION_ORDER: ScoreDimensionId[] = [
+  "influence",
+  "activity",
+  "community",
+  "engineering",
+  "credibility",
+];
+
 const DIMENSION_META: Record<
   ScoreDimensionId,
   { zh: string; en: string; emoji: string }
@@ -140,6 +149,37 @@ const SANITY_PENALTY: Record<Exclude<SanityLevel, "ok" | "unknown">, number> = {
   warn: 15,
   fail: 35,
 };
+
+/**
+ * 评分口径集中配置(调参只改这里;行为由 test/score.test.ts 钉住)。
+ * 各子信号权重仍在其构建函数内就近声明 —— 它们与证据行文案强耦合,不适合远程调参。
+ */
+export const SCORE_RUBRIC = {
+  /** 等级分数线:≥85 足金 / ≥70 K金 / ≥55 镀金 / ≥40 掺水 / 其余贴纸。 */
+  gradeThresholds: { gold: 85, silver: 70, bronze: 55, gilded: 40 },
+  /** 置信度:缺失信号扣减后的下限,以及「充分/尚可/欠缺」标签分数线。 */
+  confidenceFloor: 20,
+  confidenceLevels: { high: 80, mid: 55 },
+  /** 健全性检查启用的 star 门槛(低于即记 unknown,不扣分)。 */
+  sanityStarGates: {
+    engagement: 300,
+    contributor: 1000,
+    activityFail: 2000,
+    activityWarn: 1000,
+    forkRatio: 500,
+  },
+  /** 健全性检查阈值(与 sanityStarGates 配套的比例/数量线)。 */
+  sanityThresholds: {
+    engagementFail: 0.02,
+    engagementWarn: 0.05,
+    contributorFail: 5,
+    contributorWarn: 10,
+    activityFailAvg: 1,
+    activityWarnAvg: 0.5,
+    forkRatioFail: 0.003,
+    forkRatioWarn: 0.01,
+  },
+} as const;
 
 // ---------------------------------------------------------------------------
 // i18n 文案字典:zh 与历史输出字节级一致;en 仅在显式选择 locale 时使用。
@@ -282,10 +322,11 @@ export function gradeFor(
   total: number,
   locale: ScoreLocale = "zh",
 ): { id: ScoreGradeId; label: string; emoji: string } {
-  if (total >= 85) return { id: "gold", label: tx(STR.gradeGold, locale), emoji: "🥇" };
-  if (total >= 70) return { id: "silver", label: tx(STR.gradeSilver, locale), emoji: "🥈" };
-  if (total >= 55) return { id: "bronze", label: tx(STR.gradeBronze, locale), emoji: "🥉" };
-  if (total >= 40) return { id: "gilded", label: tx(STR.gradeGilded, locale), emoji: "⚠️" };
+  const t = SCORE_RUBRIC.gradeThresholds;
+  if (total >= t.gold) return { id: "gold", label: tx(STR.gradeGold, locale), emoji: "🥇" };
+  if (total >= t.silver) return { id: "silver", label: tx(STR.gradeSilver, locale), emoji: "🥈" };
+  if (total >= t.bronze) return { id: "bronze", label: tx(STR.gradeBronze, locale), emoji: "🥉" };
+  if (total >= t.gilded) return { id: "gilded", label: tx(STR.gradeGilded, locale), emoji: "⚠️" };
   return { id: "tinfoil", label: tx(STR.gradeTinfoil, locale), emoji: "🧻" };
 }
 
@@ -300,11 +341,11 @@ export function confidenceFromMissing(
   for (const id of missing) {
     value -= CONFIDENCE_PENALTY[id] ?? 0;
   }
-  value = Math.max(20, value);
+  value = Math.max(SCORE_RUBRIC.confidenceFloor, value);
   const label =
-    value >= 80
+    value >= SCORE_RUBRIC.confidenceLevels.high
       ? tx(STR.confHigh, locale)
-      : value >= 55
+      : value >= SCORE_RUBRIC.confidenceLevels.mid
         ? tx(STR.confMid, locale)
         : tx(STR.confLow, locale);
   return { value, label };
@@ -516,11 +557,11 @@ function buildSanity(
   const labelHighLow = tx(STR.chkHighLow, locale);
 
   // 1. star-engagement:star 高但 fork/issue/watcher 互动几乎为零。
-  if (input.stars >= 300) {
+  if (input.stars >= SCORE_RUBRIC.sanityStarGates.engagement) {
     const engagement =
       (input.forks + (input.openIssuesTotal ?? 0) + (input.subscribers ?? 0)) /
       input.stars;
-    if (engagement < 0.02) {
+    if (engagement < SCORE_RUBRIC.sanityThresholds.engagementFail) {
       push(
         "star-engagement",
         labelEngagement,
@@ -529,7 +570,7 @@ function buildSanity(
           ? `engagement/star only ${round3(engagement)}`
           : `互动信号/star 仅 ${round3(engagement)}`,
       );
-    } else if (engagement < 0.05) {
+    } else if (engagement < SCORE_RUBRIC.sanityThresholds.engagementWarn) {
       push(
         "star-engagement",
         labelEngagement,
@@ -553,9 +594,9 @@ function buildSanity(
   }
 
   // 2. star/贡献者比。
-  if (input.contributors !== null && input.stars >= 1000) {
+  if (input.contributors !== null && input.stars >= SCORE_RUBRIC.sanityStarGates.contributor) {
     const count = input.contributors.length;
-    if (!input.contributorsTruncated && count <= 5) {
+    if (!input.contributorsTruncated && count <= SCORE_RUBRIC.sanityThresholds.contributorFail) {
       push(
         "star-contributor",
         labelStarContrib,
@@ -564,7 +605,7 @@ function buildSanity(
           ? `${formatCompact(input.stars)} stars but only ${count} contributors`
           : `${formatCompact(input.stars)} star 仅 ${count} 位贡献者`,
       );
-    } else if (!input.contributorsTruncated && count <= 10) {
+    } else if (!input.contributorsTruncated && count <= SCORE_RUBRIC.sanityThresholds.contributorWarn) {
       push(
         "star-contributor",
         labelStarContrib,
@@ -581,7 +622,7 @@ function buildSanity(
   }
 
   // 3. 高星低活。
-  if (avg12 !== null && input.stars >= 2000 && avg12 < 1) {
+  if (avg12 !== null && input.stars >= SCORE_RUBRIC.sanityStarGates.activityFail && avg12 < SCORE_RUBRIC.sanityThresholds.activityFailAvg) {
     push(
       "high-star-low-activity",
       labelHighLow,
@@ -590,7 +631,7 @@ function buildSanity(
         ? `≥2k stars but only ${round2(avg12)} commits/wk`
         : `star ≥ 2k 但周均 commit 仅 ${round2(avg12)}`,
     );
-  } else if (avg12 !== null && input.stars >= 1000 && avg12 < 0.5) {
+  } else if (avg12 !== null && input.stars >= SCORE_RUBRIC.sanityStarGates.activityWarn && avg12 < SCORE_RUBRIC.sanityThresholds.activityWarnAvg) {
     push(
       "high-star-low-activity",
       labelHighLow,
@@ -606,9 +647,9 @@ function buildSanity(
   }
 
   // 4. fork/star 过低。
-  if (input.stars >= 500) {
+  if (input.stars >= SCORE_RUBRIC.sanityStarGates.forkRatio) {
     const ratio = input.forks / input.stars;
-    if (ratio < 0.003) {
+    if (ratio < SCORE_RUBRIC.sanityThresholds.forkRatioFail) {
       push(
         "fork-star",
         "fork/star",
@@ -617,7 +658,7 @@ function buildSanity(
           ? `fork/star only ${round4(ratio)}`
           : `fork/star 仅 ${round4(ratio)}`,
       );
-    } else if (ratio < 0.01) {
+    } else if (ratio < SCORE_RUBRIC.sanityThresholds.forkRatioWarn) {
       push(
         "fork-star",
         "fork/star",

@@ -31,6 +31,8 @@ export {
   gradeFor,
   confidenceFromMissing,
   SCORE_DIMENSION_WEIGHTS,
+  SCORE_DIMENSION_ORDER,
+  SCORE_RUBRIC,
 } from "./score.js";
 export type {
   RepoScoreInput,
@@ -148,3 +150,26 @@ export {
   normalizeGithubLogins,
 } from "./github-links.js";
 export type { LinkifyPart, LinkifyOpts, LinkifyHtmlOpts } from "./github-links.js";
+
+export {
+  handleGossipApiRequest,
+  handleBadgeApiRequest,
+  gossipUsagePayload,
+  clientIpFromHeaders,
+  isProductionRuntime,
+  type HttpApiRequest,
+  type HttpApiResponse,
+  type GossipApiDeps,
+  type BadgeApiDeps,
+  type BadgeApiInput,
+} from "./http-api.js";
+
+/** 宽松匹配文本中的 owner/repo(bot 平台解析聊天输入用;严格解析请用 parseRepoRef)。 */
+export const LOOSE_REPO_PATTERN =
+  /(?:https?:\/\/github\.com\/)?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)/;
+
+/** 从任意文本中提取第一个 owner/repo;严格解析交给 parseRepoRef。 */
+export function matchLooseRepo(text: string): string | null {
+  const m = text.match(LOOSE_REPO_PATTERN);
+  return m ? m[1]! : null;
+}
