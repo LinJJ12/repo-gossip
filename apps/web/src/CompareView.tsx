@@ -1,84 +1,31 @@
+import {
+  formatCompareRadarSvg,
+  GRADE_COLORS,
+  SCORE_DIMENSION_ORDER,
+  type CompareEntry,
+} from "@repo-gossip/core";
 import type { ComparePayload } from "./types";
 
-const GRADE_COLORS: Record<string, string> = {
-  gold: "#d4a017",
-  silver: "#8c96a5",
-  bronze: "#a9683b",
-  gilded: "#ff4d6d",
-  tinfoil: "#5a6270",
-};
+const DIM_ORDER = SCORE_DIMENSION_ORDER;
 
-const DIM_ORDER = [
-  "influence",
-  "activity",
-  "community",
-  "engineering",
-  "credibility",
-] as const;
+type Entry = ComparePayload["entries"][number];
+type Score = NonNullable<Entry["score"]>;
 
-type Dim = (typeof DIM_ORDER)[number];
-
-function dimMeta(
-  score: NonNullable<ComparePayload["entries"][number]["score"]>,
-  dim: Dim,
-) {
+function dimMeta(score: Score, dim: (typeof DIM_ORDER)[number]) {
   return score.dimensions.find((d) => d.id === dim);
 }
 
-function dimValue(
-  score: NonNullable<ComparePayload["entries"][number]["score"]> | null,
-  dim: Dim,
-): number | null {
+function dimValue(score: Score | null, dim: (typeof DIM_ORDER)[number]): number | null {
   if (score === null) return null;
   const d = dimMeta(score, dim);
   return d && d.score !== null ? Math.round(d.score) : null;
 }
 
-/** 五维雷达(与 core 的 formatCompareRadarSvg 同几何):网格 + 每仓库多边形。 */
-function radarSvg(entries: ComparePayload["entries"], size = 260): string {
-  const cx = size / 2;
-  const cy = size / 2 + 6;
-  const r = size / 2 - 34;
-  const esc = (s: string) =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const px = (rr: number, deg: number) =>
-    (cx + rr * Math.cos((deg * Math.PI) / 180)).toFixed(1);
-  const py = (rr: number, deg: number) =>
-    (cy + rr * Math.sin((deg * Math.PI) / 180)).toFixed(1);
-
-  const metaSource = entries.find((e) => e.score !== null)?.score;
-  const axes = DIM_ORDER.map((dim, i) => ({
-    dim,
-    angle: -90 + i * 72,
-    label: metaSource ? (dimMeta(metaSource, dim)?.label ?? dim) : dim,
-  }));
-
-  let svg = "";
-  for (const level of [0.25, 0.5, 0.75, 1]) {
-    const pts = axes.map((a) => `${px(r * level, a.angle)},${py(r * level, a.angle)}`).join(" ");
-    svg += `<polygon points="${pts}" fill="none" stroke="rgba(242,239,230,0.14)" stroke-width="1"/>`;
-  }
-  for (const a of axes) {
-    svg += `<line x1="${cx}" y1="${cy}" x2="${px(r, a.angle)}" y2="${py(r, a.angle)}" stroke="rgba(242,239,230,0.14)" stroke-width="1"/>`;
-  }
-  for (const a of axes) {
-    const lx = Number(px(r + 16, a.angle));
-    const anchor = Math.abs(lx - cx) < 6 ? "middle" : lx > cx ? "start" : "end";
-    svg += `<text x="${lx}" y="${Number(py(r + 16, a.angle)) + 4}" text-anchor="${anchor}" font-size="11" fill="rgba(242,239,230,0.75)">${esc(a.label)}</text>`;
-  }
-  entries.forEach((e, idx) => {
-    if (e.score === null) return;
-    const pts = axes
-      .map((a) => {
-        const v = (dimValue(e.score, a.dim) ?? 0) / 100;
-        return `${px(r * v, a.angle)},${py(r * v, a.angle)}`;
-      })
-      .join(" ");
-    const color = GRADE_COLORS[e.score.grade?.id ?? ""] ?? "#1de2c5";
-    svg += `<polygon points="${pts}" fill="${color}" fill-opacity="0.18" stroke="${color}" stroke-width="2" ${idx === 0 ? "" : `stroke-dasharray="${4 + idx * 2} ${3 + idx}"`}/>`;
+/** 雷达几何与等级配色全部来自 core(与 CLI/serverless 同一实现)。 */
+function radar(entries: Entry[]): string {
+  return formatCompareRadarSvg(entries as unknown as CompareEntry[], {
+    ariaLabel: "含金量对比雷达",
   });
-
-  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img" aria-label="含金量对比雷达">${svg}</svg>`;
 }
 
 export function CompareView({ data }: { data: ComparePayload }) {
@@ -147,7 +94,7 @@ export function CompareView({ data }: { data: ComparePayload }) {
         <div
           className="compare-radar"
           aria-hidden={ok.length === 0}
-          dangerouslySetInnerHTML={{ __html: radarSvg(data.entries) }}
+          dangerouslySetInnerHTML={{ __html: radar(data.entries) }}
         />
       </div>
 

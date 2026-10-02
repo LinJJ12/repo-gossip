@@ -1,3 +1,4 @@
+import { SCORE_DIMENSION_ORDER, SCORE_DIMENSION_WEIGHTS } from "@repo-gossip/core";
 import type { ScorePayload } from "./types";
 
 const LEVEL_ICON: Record<string, string> = {
@@ -12,6 +13,11 @@ const WATERMARK_LABEL: Record<string, string> = {
   suspicious: "存疑",
   "high-risk": "高危",
 };
+
+/** 从 core 权重常量派生文案,避免「各 20%」这类说明与实现脱节。 */
+const DIMENSION_WEIGHT_NOTE = SCORE_DIMENSION_ORDER.map(
+  (id) => `${Math.round((SCORE_DIMENSION_WEIGHTS[id] ?? 0) * 100)}%`,
+).join("/");
 
 /** 暗色编辑部风格的金铺检定卡:总分 + 五维条 + 健全性警示。 */
 export function ScoreView({ data }: { data: ScorePayload }) {
@@ -102,7 +108,7 @@ export function ScoreView({ data }: { data: ScorePayload }) {
       </section>
 
       <footer className="score-foot">
-        评分基于 GitHub 公开数据的可解释模型(影响力/活跃度/社区/工程/信用度各 20%)。
+        评分基于 GitHub 公开数据的可解释模型(影响力/活跃度/社区/工程/信用度权重 {DIMENSION_WEIGHT_NOTE})。
         含水量为比例+时间线信号的统计估计,不构成对任何账号的指控。
       </footer>
     </article>
