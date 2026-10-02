@@ -9,6 +9,7 @@ import {
   type HistoryEntry,
   upsertHistoryInStorage,
 } from "./history";
+import { missingSignalLabel } from "@repo-gossip/core";
 import { SAMPLE_TABLOID } from "./sample";
 import type {
   ComparePayload,
@@ -327,7 +328,7 @@ export function App() {
           <>
             {scoreData.missing.length > 0 && (
               <p className="sample-banner warn-banner">
-                部分信号缺失,评分置信度受限:{scoreData.missing.join(" · ")}
+                部分信号缺失,评分置信度受限:{scoreData.missing.map((id) => missingSignalLabel(id)).join(" · ")}
               </p>
             )}
             <ScoreView data={scoreData} />

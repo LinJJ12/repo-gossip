@@ -311,3 +311,13 @@ describe("formatScoreCard", () => {
     assert.match(good.markdown, /置信度 100\(充分\)/);
   });
 });
+
+describe("missingSignalLabel", () => {
+  it("已知 id 映射为可读文案,未知 id 原样回显", async () => {
+    const { missingSignalLabel } = await import("../packages/core/src/score.js");
+    assert.equal(missingSignalLabel("stargazers"), "star 时间线(stargazers)");
+    assert.equal(missingSignalLabel("stargazers", "en"), "star timeline (stargazers)");
+    assert.equal(missingSignalLabel("checklist"), "工程文件清单");
+    assert.equal(missingSignalLabel("future-signal"), "future-signal");
+  });
+});

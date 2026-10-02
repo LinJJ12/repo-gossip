@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as loadDotenv } from "dotenv";
 import { runGossip, runScore, runCompare } from "./gossip.js";
+import { missingSignalLabel } from "./score.js";
 import type { ScoreLocale } from "./types.js";
 
 loadDotenv({
@@ -93,7 +94,9 @@ async function main() {
     console.error(`Scoring ${repo}...`);
     const { score: repoScore, message, missing } = await runScore({ repo, locale });
     if (missing.length > 0) {
-      console.error(`[missing signals] ${missing.join(", ")}`);
+      console.error(
+        `[missing signals] ${missing.map((id) => missingSignalLabel(id)).join(", ")}`,
+      );
     }
     if (json) {
       console.log(JSON.stringify(repoScore, null, 2));

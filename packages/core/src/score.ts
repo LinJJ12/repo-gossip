@@ -151,6 +151,34 @@ const SANITY_PENALTY: Record<Exclude<SanityLevel, "ok" | "unknown">, number> = {
 };
 
 /**
+ * 缺失信号 id → 人类可读文案。missing 集合内部始终使用稳定 id(与
+ * CONFIDENCE_PENALTY 键一致),仅在展示层翻译;未知 id 原样回显。
+ */
+export const MISSING_SIGNAL_LABEL: Record<string, { zh: string; en: string }> = {
+  weeklyCommits: { zh: "commit 活跃度(stats)", en: "commit activity (stats)" },
+  contributors: { zh: "贡献者列表", en: "contributors" },
+  mergedPrs90d: { zh: "90 天合并 PR(Search)", en: "merged PRs 90d (search)" },
+  closedIssues90d: {
+    zh: "90 天关闭 issue(Search)",
+    en: "closed issues 90d (search)",
+  },
+  openIssues: { zh: "issue 开放量(Search)", en: "open issues (search)" },
+  subscribers: { zh: "watcher 数", en: "watchers" },
+  releases90d: { zh: "近 90 天发版", en: "releases 90d" },
+  checklist: { zh: "工程文件清单", en: "engineering checklist" },
+  stargazers: { zh: "star 时间线(stargazers)", en: "star timeline (stargazers)" },
+};
+
+export function missingSignalLabel(
+  id: string,
+  locale: ScoreLocale = "zh",
+): string {
+  const label = MISSING_SIGNAL_LABEL[id];
+  if (!label) return id;
+  return locale === "en" ? label.en : label.zh;
+}
+
+/**
  * 评分口径集中配置(调参只改这里;行为由 test/score.test.ts 钉住)。
  * 各子信号权重仍在其构建函数内就近声明 —— 它们与证据行文案强耦合,不适合远程调参。
  */

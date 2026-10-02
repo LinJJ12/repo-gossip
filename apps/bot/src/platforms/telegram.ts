@@ -2,6 +2,7 @@ import { Bot, InlineKeyboard } from "grammy";
 import {
   LOOSE_REPO_PATTERN,
   matchLooseRepo,
+  missingSignalLabel,
   parseCompareRepos,
   runCompare,
   runGossip,
@@ -165,7 +166,9 @@ async function replyScore(ctx: ReplyCtx, repo: string) {
     const { message, missing } = await runScore({ repo });
     await ctx.reply(message.plain.slice(0, MAX_TELEGRAM_TEXT));
     if (missing.length > 0) {
-      await ctx.reply(`⚠️ 缺失信号:${missing.join("、")}(置信度已降权)`);
+      await ctx.reply(
+        `⚠️ 缺失信号:${missing.map((id) => missingSignalLabel(id)).join("、")}(置信度已降权)`,
+      );
     }
   } catch (err) {
     await ctx.reply(

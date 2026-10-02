@@ -33,6 +33,8 @@ export {
   SCORE_DIMENSION_WEIGHTS,
   SCORE_DIMENSION_ORDER,
   SCORE_RUBRIC,
+  missingSignalLabel,
+  MISSING_SIGNAL_LABEL,
 } from "./score.js";
 export type {
   RepoScoreInput,

@@ -1,5 +1,6 @@
 import {
   matchLooseRepo,
+  missingSignalLabel,
   parseCompareRepos,
   runCompare,
   runGossip,
@@ -186,7 +187,7 @@ async function replyScore(
       await sendFeishuText(
         options,
         target,
-        `⚠️ 缺失信号:${missing.join("、")}(置信度已降权)`,
+        `⚠️ 缺失信号:${missing.map((id) => missingSignalLabel(id)).join("、")}(置信度已降权)`,
       );
     }
     return { ok: true } as const;

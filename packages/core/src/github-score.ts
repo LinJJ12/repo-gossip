@@ -268,6 +268,11 @@ async function probeDocs(
 /**
  * stargazer 时间线(starred_at,`star+json` media type),最多 4 页。
  * 任一页失败 → 返回 null 并登记 stargazers(评分含水量标记覆盖不足)。
+ *
+ * ⚠️ 不要"改用" GraphQL 的 repository.stargazers 连接做回退:被 GitHub 风控
+ * 标记的账号在 REST 得到 404,在 GraphQL 会得到 **静默空数据**(200 + totalCount:0
+ * + 空 edges,实测 2026-10)。静默空时间线会让含水量误判为"干净",比缺失更糟。
+ * 404 时正确动作就是登记 missing 并走比例信号降级。
  */
 async function fetchStargazerTimeline(
   octokit: Octokit,

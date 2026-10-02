@@ -10,6 +10,7 @@ import {
 } from "discord.js";
 import {
   matchLooseRepo,
+  missingSignalLabel,
   parseCompareRepos,
   runCompare,
   runGossip,
@@ -179,7 +180,11 @@ async function handleScore(interaction: ChatInputCommandInteraction) {
   try {
     const { message, missing } = await runScore({ repo, locale });
     const missingNote =
-      missing.length > 0 ? `\n\n⚠️ 缺失信号:${missing.join("、")}` : "";
+      missing.length > 0
+        ? `\n\n⚠️ 缺失信号:${missing
+            .map((id) => missingSignalLabel(id, locale))
+            .join("、")}`
+        : "";
     await interaction.editReply({
       content: message.markdown
         .slice(0, MAX_DISCORD_TEXT - missingNote.length) + missingNote,

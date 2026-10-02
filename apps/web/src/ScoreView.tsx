@@ -1,4 +1,8 @@
-import { SCORE_DIMENSION_ORDER, SCORE_DIMENSION_WEIGHTS } from "@repo-gossip/core";
+import {
+  SCORE_DIMENSION_ORDER,
+  SCORE_DIMENSION_WEIGHTS,
+  missingSignalLabel,
+} from "@repo-gossip/core";
 import type { ScorePayload } from "./types";
 
 const LEVEL_ICON: Record<string, string> = {
@@ -44,7 +48,9 @@ export function ScoreView({ data }: { data: ScorePayload }) {
           💧 含水量 {score.watermark.percent}%({WATERMARK_LABEL[score.watermark.level]})
         </p>
         {data.missing.length > 0 && (
-          <p className="score-missing">部分信号缺失:{data.missing.join(" · ")}</p>
+          <p className="score-missing">
+            部分信号缺失:{data.missing.map((id) => missingSignalLabel(id)).join(" · ")}
+          </p>
         )}
       </header>
 
