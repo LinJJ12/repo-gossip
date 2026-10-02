@@ -5,7 +5,16 @@
     "moduleResolution": "NodeNext",
     "strict": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@repo-gossip/core": [
+        "../packages/core/src/index.ts"
+      ]
+    }
   },
-  "include": ["./**/*.ts", "../packages/core/src/**/*.ts"]
+  "include": [
+    "./**/*.ts",
+    "../packages/core/src/**/*.ts"
+  ]
 }
