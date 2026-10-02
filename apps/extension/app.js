@@ -454,7 +454,9 @@
     const analyzed = tabloid.analyzed;
     const snap = analyzed.snapshot || {};
     const temp = analyzed.temperature || {};
-    const level = temp.level || "cool";
+    const level = HistoryLogic
+      ? HistoryLogic.sanitizeTempLevel(temp.level)
+      : temp.level || "cool";
     const mode = data.mode;
     const banners = [];
     if (mode && MODE_LABEL[mode]) {

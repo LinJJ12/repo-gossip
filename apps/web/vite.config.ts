@@ -14,7 +14,10 @@ const repoRoot = path.resolve(root, "../..");
 loadDotenv({ path: path.resolve(repoRoot, ".env") });
 
 const MAX_BODY_BYTES = 64_000;
+
+class BodyTooLargeError extends Error {}
 const BADGE_PATH_RE = /^\/api\/badge\/([^/]+)\/([^/]+?)(?:\.svg)?$/;
+const GOSSIP_PATH_RE = /^\/api\/gossip(?:$|[/?])/;
 
 /**
  * dev 环境的 /api/* 与生产(api/*.ts)共用 core 的 handleGossipApiRequest /
@@ -28,7 +31,7 @@ function gossipApiPlugin(): Plugin {
       server.middlewares.use(async (req, res, next) => {
         const url = req.url ?? "/";
         const badgeMatch = BADGE_PATH_RE.exec(url.split("?")[0] ?? "");
-        const isGossip = url.startsWith("/api/gossip");
+        const isGossip = GOSSIP_PATH_RE.test(url);
         if (!isGossip && !(badgeMatch && req.method === "GET")) return next();
 
         let response: HttpApiResponse;
@@ -37,11 +40,15 @@ function gossipApiPlugin(): Plugin {
           if (req.method === "POST") {
             try {
               bodyText = await readBody(req);
-            } catch {
+            } catch (err) {
+              // 超限 → 413;断连/流错误 → 400,不混淆。
+              const tooLarge = err instanceof BodyTooLargeError;
               sendNode(res, {
-                status: 413,
+                status: tooLarge ? 413 : 400,
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ error: "body too large" }),
+                body: JSON.stringify({
+                  error: tooLarge ? "body too large" : "invalid body",
+                }),
               });
               return;
             }
@@ -80,7 +87,7 @@ function readBody(req: {
         const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as BufferSource);
         size += buf.length;
         if (size > MAX_BODY_BYTES) {
-          reject(new Error("body too large"));
+          reject(new BodyTooLargeError("body too large"));
           return;
         }
         chunks.push(buf);

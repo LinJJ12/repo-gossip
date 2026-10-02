@@ -39,7 +39,22 @@
         "issues",
         "new",
         "organizations",
+        "orgs",
         "account",
+        "trending",
+        "collections",
+        "sponsors",
+        "search",
+        "features",
+        "events",
+        "about",
+        "pricing",
+        "security",
+        "customer-stories",
+        "readme",
+        "enterprise",
+        "team",
+        "site",
       ].includes(owner)
     ) {
       return null;

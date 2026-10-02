@@ -98,7 +98,9 @@ async function upsertHistoryFromData(repo, data) {
     throw new Error("history-logic unavailable");
   }
   const entry = HistoryLogic.buildHistoryEntry(repo, data);
-  if (!entry) return loadHistory();
+  if (!entry) {
+    return withHistoryLock(() => loadHistory());
+  }
   return withHistoryLock(async () => {
     const list = await loadHistory();
     const next = HistoryLogic.upsertHistoryList(list, entry, HISTORY_LIMIT);
@@ -194,6 +196,8 @@ async function fetchGossip(repo) {
       offline: Boolean(settings.offline),
       format: "web",
     }),
+    // MV3 service worker 常驻;不设超时会让弹层转圈到天荒地老。
+    signal: AbortSignal.timeout(60_000),
   });
 
   const json = await res.json().catch(() => ({}));

@@ -62,6 +62,12 @@
       : "cool";
   }
 
+  function toFiniteOrNull(v) {
+    if (v == null) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
   /**
    * Keep fields needed for structured panel render + linkify; drop bulky commit bodies.
    * 严格形态:温度恒有默认值、stars 数值化、markdown 回退 plain(与 web 版一致)。
@@ -135,10 +141,7 @@
             emoji: String(temp?.emoji ?? ""),
             label: String(temp?.label ?? ""),
             commitsLast3Days: Number(temp?.commitsLast3Days) || 0,
-            daysSinceLastCommit:
-              temp?.daysSinceLastCommit == null
-                ? null
-                : Number(temp.daysSinceLastCommit),
+            daysSinceLastCommit: toFiniteOrNull(temp?.daysSinceLastCommit),
           },
           snapshot: {
             fullName: String(snap?.fullName ?? ""),
