@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { TabloidView } from "./TabloidView";
 import { ScoreView } from "./ScoreView";
 import { CompareView } from "./CompareView";
@@ -47,22 +47,31 @@ export function App() {
   const [history, setHistory] = useState<HistoryEntry[]>(() =>
     loadHistoryFromStorage(),
   );
+  // 请求进行中标记:ref 而非 state,闭包内也能拿到最新值,
+  // 防止 loading 期间回车/点样例触发并发请求互相覆盖 UI。
+  const busyRef = useRef(false);
 
   async function generate(target = repo) {
+    if (busyRef.current) return;
     const trimmed = target.trim();
     if (!trimmed) {
       setError("先丢一个仓库链接过来");
       return;
     }
+    busyRef.current = true;
     setLoading(true);
     setError(null);
     setIsSample(false);
     setHistoryOpen(false);
     try {
       const isScore = intent === "score";
-      // 验金模式下输入 2-4 个仓库(逗号/空白分隔)→ 对比模式
-      const multiRepos =
-        isScore && /[,，\s]+/.test(trimmed) ? trimmed.split(/[,，\s]+/).filter(Boolean) : null;
+      // 验金模式下输入 2-4 个仓库(逗号/空白分隔)→ 对比模式;
+      // 只有 1 个(如尾逗号 "a/b,")时按单仓评分处理。
+      const parts =
+        isScore && /[,，\s]+/.test(trimmed)
+          ? trimmed.split(/[,，\s]+/).filter(Boolean)
+          : [];
+      const multiRepos = parts.length >= 2 ? parts : null;
       const res = await fetch("/api/gossip", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -98,6 +107,7 @@ export function App() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      busyRef.current = false;
       setLoading(false);
     }
   }

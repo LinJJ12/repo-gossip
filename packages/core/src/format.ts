@@ -85,6 +85,27 @@ export function toDiscordEmbed(tabloid: Tabloid) {
   };
 }
 
+/**
+ * 服务端 Key 模式下,Bot 侧不透传上游 LLM 错误细节(可能含上游响应体片段 /
+ * 配额信息),统一为固定降级文案 —— 与 http-api 的 sanitizeLlmError 同口径。
+ */
+export function llmDegradedNote(llmError?: string): string | undefined {
+  return llmError ? "LLM 暂不可用,已回落本地模板" : undefined;
+}
+
+/**
+ * lark_md 会解析 `<at id=all></at>` 等标签;PR 标题 / 提交信 / LLM 输出都是
+ * 攻击者可控文本,直接拼卡片可被用来 @全体成员。小报内容不含合法标签,
+ * 统一剔除 at 标签并把剩余尖括号换成全角,彻底断掉标签注入。
+ */
+function sanitizeLarkMd(s: string): string {
+  return s
+    .replace(/<at[^>]*>/gi, "")
+    .replace(/<\/at>/gi, "")
+    .replace(/</g, "＜")
+    .replace(/>/g, "＞");
+}
+
 export function toFeishuCard(tabloid: Tabloid) {
   const msg = formatTabloid(tabloid);
   return {
@@ -93,7 +114,7 @@ export function toFeishuCard(tabloid: Tabloid) {
       header: {
         title: {
           tag: "plain_text",
-          content: `\uD83D\uDCF0 ${tabloid.analyzed.snapshot.fullName}`,
+          content: `\uD83D\uDCF0 ${sanitizeLarkMd(tabloid.analyzed.snapshot.fullName)}`,
         },
         template:
           tabloid.analyzed.temperature.level === "blazing"
@@ -107,7 +128,7 @@ export function toFeishuCard(tabloid: Tabloid) {
           tag: "div",
           text: {
             tag: "lark_md",
-            content: msg.markdown.slice(0, 4000),
+            content: sanitizeLarkMd(msg.markdown.slice(0, 4000)),
           },
         },
       ],

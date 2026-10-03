@@ -52,11 +52,11 @@ Web 预览站顶部一键切换;CLI 用 `--score` / `--compare`;同一引擎,两
 | 🔥 **活跃度** | 还活着吗 | 周均 commit · 近 4 周/前 8 周动能 · 90 天合并 PR · 发版节奏 |
 | 👥 **社区** | 走了一个撑得住吗 | 贡献者规模 · **Bus Factor**(覆盖 50% 贡献所需人数)· issue 关闭吞吐 |
 | 🔧 **工程** | 靠谱吗 | license · README · CI · CONTRIBUTING · SECURITY · 30 天内推送 |
-| 🧪 **信用度** | star 是真金还是镀的 | 比例健全性检查 · **含水量检测**(star 时间线突发 + 比例异常) |
+| 🧪 **信用度** | star 是真金还是镀的 | 比例健全性检查 · **含水量检测**(star 时间线突发 + 微模式 + 比例异常) |
 
 **等级**:≥85 足金 🥇 · 70-84 K金 🥈 · 55-69 镀金 🥉 · 40-54 掺水 ⚠️ · <40 贴纸 🧻
 
-> **反刷星**:研究显示 GitHub 上存在约 [600 万疑似假 star](https://arxiv.org/html/2412.13459v2)。验金所会检测「单日尖峰 / 连续堆量」的疑似刷量窗口与「高星低互动」比例异常,给出含水量估计 —— 只报告统计模式,不指控任何账号。
+> **反刷星**:研究显示 GitHub 上存在约 [600 万疑似假 star](https://arxiv.org/html/2412.13459v2)。验金所会检测「单日尖峰 / 连续堆量」的疑似刷量窗口、「高星低互动」比例异常,以及四类微模式证据 —— **同秒注入**(峰值同一秒 5+ star)、**短窗堆量**(30 秒 8+ star)、**间隔机械化**(中位间隔 <90s 且变异系数 <0.2,真人星是爆发且不规则的)、**账号连号 / 昵称农场**(批量注册的号直接刷),给出含水量估计与逐条证据 —— 只报告统计模式,不指控任何账号(信号设计参考开源实现 [fake-star-audit](https://github.com/ardev-lab/fake-star-audit))。
 >
 > **置信度**:数据不足(如未配 token、stats 端点降级)时自动降权并标注「缺失信号」,不假装确定。
 >
@@ -161,6 +161,7 @@ DISCORD_BOT_TOKEN=xxx npm run bot
 
 - 事件订阅:`https://<域名>/api/feishu`
 - 配置:`FEISHU_APP_ID` / `FEISHU_APP_SECRET` / `FEISHU_VERIFICATION_TOKEN`
+- 推荐配置 `FEISHU_ENCRYPT_KEY`(飞书开放平台「事件与回调 → 加密策略」生成):配置后事件按 `X-Lark-Signature` 验签,防止 verification_token 泄漏后事件被长期伪造
 - 命令:发 `score <仓库>`(验金)、`compare <仓库1> <仓库2>`(对比),或直接发仓库链接出小报
 
 </details>
@@ -189,10 +190,10 @@ curl -X POST https://<domain>/api/gossip \
 |--------|------|
 | `x-github-token` | `GITHUB_TOKEN` |
 | `x-llm-api-key` | `LLM_API_KEY` |
-| `x-llm-base-url` | `LLM_BASE_URL` |
-| `x-llm-model` | `LLM_MODEL` |
+| `x-llm-base-url` | `LLM_BASE_URL`(须同时带 `x-llm-api-key` 才生效,防止服务端 Key 被发往第三方地址;且禁止指向私网/环回/云 metadata) |
+| `x-llm-model` | `LLM_MODEL`(同上,须自带 `x-llm-api-key`) |
 
-内部调用可带 `Authorization: Bearer $WEBHOOK_SECRET` 或 `x-webhook-secret`。公开路径有进程内限流与短时缓存。
+内部调用可带 `Authorization: Bearer $WEBHOOK_SECRET` 或 `x-webhook-secret`。公开路径有进程内限流与短时缓存(限流按平台注入的客户端 IP 计;自托管无平台头时按 `x-forwarded-for` 尽力而为,可被伪造头绕过,生产建议置于可信反代之后)。
 
 **README 徽章**:把下面这行放进任意项目 README,实时展示其含金量(失败/限流均输出灰色 N/A,永不破图;`?lang=en` 英文;服务端对单 IP 独立限流,防止枚举烧穿 GitHub 配额):
 
@@ -214,6 +215,8 @@ curl -X POST https://<domain>/api/gossip \
 | `WEBHOOK_SECRET` | 内部调用校验(可选) |
 | `GOSSIP_REQUIRE_WEBHOOK_SECRET` | `1` 时生产强制鉴权 |
 | `GOSSIP_CORS_ORIGINS` | CORS,逗号分隔或 `*` |
+| `GOSSIP_ALLOW_PRIVATE_LLM_BASE_URL` | `1` 放行 BYOK 指向私网/环回的 LLM 地址(自托管本地网关;云 metadata 永远封禁) |
+| `FEISHU_ENCRYPT_KEY` | 飞书事件签名密钥,配置后按 `X-Lark-Signature` 验签(推荐) |
 | `GOSSIP_RATE_LIMIT_*` · `GOSSIP_CACHE_TTL_SEC` | 限流与缓存(`GOSSIP_RATE_LIMIT_IP_PER_HOUR` / `_REPO_PER_HOUR` / `_BADGE_PER_HOUR`,徽章端点独立限流) |
 | `GOSSIP_BOT_USER_RATE_LIMIT` | Bot 每用户命令限速(每 10 分钟次数,默认 12,0 不限) |
 
@@ -279,8 +282,11 @@ CI:Push / PR 跑 `npm test` 与 `npm run typecheck`([`.github/workflows/ci.yml`]
 完整说明见 [SECURITY.md](SECURITY.md)。要点:
 
 - 不要把 `WEBHOOK_SECRET`、LLM Key、GitHub Token、扩展打包私钥(`*.pem`)写进源码或提交进 Git
-- 扩展 BYOK 只存在本机;请求只发往你配置的 API Base URL
+- 扩展 BYOK 只存在本机;请求只发往你配置的 API Base URL(远程地址强制 https;非默认站点需在保存设置时授权)
 - 公开 `/api/gossip` 默认可不带 Webhook 密钥;生产若要强制鉴权,设 `GOSSIP_REQUIRE_WEBHOOK_SECRET=1`
+- BYOK 的 `x-llm-base-url` / `x-llm-model` 只在自带 `x-llm-api-key` 时生效,且禁止指向私网/环回/云 metadata(SSRF 防护;自托管本地网关设 `GOSSIP_ALLOW_PRIVATE_LLM_BASE_URL=1`)
+- 飞书建议配 `FEISHU_ENCRYPT_KEY` 走签名验证(verification_token 是长期明文口令);Telegram 走 `TELEGRAM_WEBHOOK_SECRET`
+- 服务端 Key 的上游 LLM 错误细节不对公开客户端/Bot 群聊外泄,统一展示「LLM 暂不可用」
 - Web「最近」与扩展「最近」互不同步(浏览器存储隔离)
 - 发现漏洞请走私密渠道报告,不要开公开 Issue 贴密钥
 

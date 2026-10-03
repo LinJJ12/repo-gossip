@@ -11,6 +11,10 @@ type WindowEntry = {
 
 const stores = new Map<string, Map<string, WindowEntry>>();
 
+// 键来自客户端可影响的输入(IP 头 / repo 串),无上限会被伪键撑爆内存。
+// 超限时先清过期窗口,仍满则按插入序淘汰最旧一半。
+const MAX_ENTRIES_PER_STORE = 10_000;
+
 function storeFor(namespace: string): Map<string, WindowEntry> {
   let s = stores.get(namespace);
   if (!s) {
@@ -18,6 +22,17 @@ function storeFor(namespace: string): Map<string, WindowEntry> {
     stores.set(namespace, s);
   }
   return s;
+}
+
+function evictStore(store: Map<string, WindowEntry>, windowMs: number, nowMs: number): void {
+  for (const [key, entry] of store) {
+    if (nowMs - entry.windowStartMs >= windowMs) store.delete(key);
+  }
+  while (store.size >= MAX_ENTRIES_PER_STORE) {
+    const oldest = store.keys().next().value;
+    if (oldest === undefined) break;
+    store.delete(oldest);
+  }
 }
 
 /**
@@ -38,6 +53,9 @@ export function consumeRateLimit(
   const store = storeFor(namespace);
   const existing = store.get(key);
   if (!existing || nowMs - existing.windowStartMs >= windowMs) {
+    if (!store.has(key) && store.size >= MAX_ENTRIES_PER_STORE) {
+      evictStore(store, windowMs, nowMs);
+    }
     store.set(key, { count: 1, windowStartMs: nowMs });
     return { ok: true, remaining: Math.max(0, limit - 1) };
   }

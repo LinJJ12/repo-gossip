@@ -50,7 +50,7 @@ export async function fetchRepoScoreInput(
     }
   }
 
-  const [weeklyCommits, contributors, mergedPrs90d, closedIssues90d, openIssues, releases90d, hasReadme, hasCi, docs, starredAt] =
+  const [weeklyCommits, contributors, mergedPrs90d, closedIssues90d, openIssues, releases90d, hasReadme, hasCi, docs, starTimeline] =
     await Promise.all([
       fetchWeeklyCommits(octokit, ref, missing, options?.statsRetryDelayMs),
       soft("contributors", async () => {
@@ -158,7 +158,9 @@ export async function fetchRepoScoreInput(
     hasReadme,
     hasContributing,
     hasSecurity,
-    starredAt,
+    starredAt: starTimeline?.starredAt ?? null,
+    stargazerIds: starTimeline?.ids,
+    stargazerLogins: starTimeline?.logins,
     starTimelineSkipped: (repo.stargazers_count ?? 0) < STAR_TIMELINE_MIN_STARS,
     missing: [...missing],
   };
@@ -266,20 +268,27 @@ async function probeDocs(
 }
 
 /**
- * stargazer 时间线(starred_at,`star+json` media type),最多 4 页。
+ * stargazer 时间线(starred_at + user.id/login,`star+json` media type),最多 4 页。
  * 任一页失败 → 返回 null 并登记 stargazers(评分含水量标记覆盖不足)。
+ * 三个数组按下标对齐(时间戳无效的条目整条丢弃)。
  *
  * ⚠️ 不要"改用" GraphQL 的 repository.stargazers 连接做回退:被 GitHub 风控
  * 标记的账号在 REST 得到 404,在 GraphQL 会得到 **静默空数据**(200 + totalCount:0
  * + 空 edges,实测 2026-10)。静默空时间线会让含水量误判为"干净",比缺失更糟。
  * 404 时正确动作就是登记 missing 并走比例信号降级。
  */
+type StarTimeline = {
+  starredAt: string[];
+  ids: (number | null)[];
+  logins: (string | null)[];
+};
+
 async function fetchStargazerTimeline(
   octokit: Octokit,
   ref: RepoRef,
   missing: Set<string>,
-): Promise<string[] | null> {
-  const starredAt: string[] = [];
+): Promise<StarTimeline | null> {
+  const timeline: StarTimeline = { starredAt: [], ids: [], logins: [] };
   try {
     for (let page = 1; page <= STAR_TIMELINE_PAGES; page++) {
       const { data } = await withGithubRetry(() =>
@@ -293,12 +302,20 @@ async function fetchStargazerTimeline(
       );
       if (!Array.isArray(data)) break;
       for (const item of data) {
-        const t = (item as { starred_at?: string | null }).starred_at;
-        if (typeof t === "string") starredAt.push(t);
+        const entry = item as {
+          starred_at?: string | null;
+          user?: { id?: number; login?: string } | null;
+        };
+        if (typeof entry.starred_at !== "string") continue;
+        timeline.starredAt.push(entry.starred_at);
+        timeline.ids.push(typeof entry.user?.id === "number" ? entry.user.id : null);
+        timeline.logins.push(
+          typeof entry.user?.login === "string" ? entry.user.login : null,
+        );
       }
       if (data.length < 100) break;
     }
-    return starredAt;
+    return timeline;
   } catch {
     missing.add("stargazers");
     return null;

@@ -270,6 +270,32 @@
     });
   }
 
+  /**
+   * manifest 不再硬授权全部 https 站点;自定义 API 地址在保存时按需申请主机权限。
+   * 必须在保存流程最前调用(permissions.request 依赖用户手势)。
+   */
+  async function ensureApiOriginPermission(base) {
+    let origin;
+    try {
+      origin = new URL(base).origin;
+    } catch {
+      return;
+    }
+    const isLocal =
+      origin === "http://localhost" ||
+      origin.startsWith("http://localhost:") ||
+      origin === "http://127.0.0.1" ||
+      origin.startsWith("http://127.0.0.1:");
+    if (!origin.startsWith("https://") && !isLocal) return;
+    const pattern = `${origin}/*`;
+    try {
+      if (await chrome.permissions.contains({ origins: [pattern] })) return;
+      await chrome.permissions.request({ origins: [pattern] });
+    } catch {
+      // 用户拒绝:服务端默认回 ACAO * 时仍可用,不阻塞保存。
+    }
+  }
+
   async function saveSettings(event) {
     event.preventDefault();
     /** @type {Record<string, string | number | boolean>} */
@@ -285,6 +311,7 @@
         payload[key] = el.value.trim();
       }
     }
+    await ensureApiOriginPermission(String(payload.apiBaseUrl || "").trim());
     await chrome.storage.local.set(payload);
     const status = document.getElementById("settings-status");
     if (status) {
@@ -595,6 +622,7 @@
   }
 
   async function generate(target) {
+    if (loading) return; // 防止 loading 中回车/点样例并发提交互相覆盖
     const trimmed = String(target ?? repoInput.value).trim();
     if (!trimmed) {
       setError("先丢一个仓库链接过来");

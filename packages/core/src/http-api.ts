@@ -88,8 +88,15 @@ function singleHeader(
   return typeof value === "string" ? value : undefined;
 }
 
-/** 代理头优先取客户端 IP;无代理头时返回 "unknown"。 */
+/**
+ * 代理头优先取客户端 IP。
+ * Vercel 平台注入的 x-vercel-forwarded-for 不可被客户端伪造,优先采用;
+ * x-forwarded-for 的链首是客户端自报值,仅作无平台头的部署的尽力而为 fallback
+ * (此类部署下按 IP 限流可被轮换 XFF 绕过,文档已标注)。
+ */
 export function clientIpFromHeaders(headers: HeaderBag): string {
+  const vercel = singleHeader(headers, "x-vercel-forwarded-for");
+  if (vercel?.trim()) return vercel.split(",")[0]!.trim();
   const forwarded = singleHeader(headers, "x-forwarded-for");
   if (forwarded?.trim()) return forwarded.split(",")[0]!.trim();
   const real = singleHeader(headers, "x-real-ip");
@@ -316,7 +323,12 @@ async function respondGossip(
   const scoreMode = normalizedMode === "score";
   const compareMode = normalizedMode === "compare";
 
-  const env = extractByokEnv(headers);
+  const env = extractByokEnv(headers, {
+    allowPrivateLlmBaseUrl:
+      process.env.GOSSIP_ALLOW_PRIVATE_LLM_BASE_URL?.trim() === "1" ||
+      process.env.GOSSIP_ALLOW_PRIVATE_LLM_BASE_URL?.trim().toLowerCase() ===
+        "true",
+  });
   const ttlSec = parsePositiveInt(process.env.GOSSIP_CACHE_TTL_SEC, 600);
   const normalizedFormat = intent.format.trim().toLowerCase() || "web";
 
@@ -363,6 +375,8 @@ async function respondGossip(
     offline: intent.offline,
     format: cacheFormat,
     byokFingerprint: byokFingerprint(env),
+    lang: locale,
+    internal,
   });
 
   // Serve cache before consuming rate-limit budget (HIT is cheap).
@@ -541,11 +555,13 @@ export async function handleBadgeApiRequest(
   // 与 gossip 路径同口径解析(0 = 关闭缓存),不再强制 ≥600s。
   const ttlSec = parsePositiveInt(process.env.GOSSIP_CACHE_TTL_SEC, 600);
   const cacheKey = buildGossipCacheKey({
-    repo: `${locale}|${repoRef}`,
+    repo: repoRef,
     days: 0,
     offline: true,
     format: "badge",
     byokFingerprint: "",
+    lang: locale,
+    internal: false,
   });
 
   const baseHeaders: Record<string, string> = {
@@ -598,9 +614,14 @@ export async function handleBadgeApiRequest(
     };
   } catch {
     // 仓库不存在 / 限额 / 网络失败 —— 一律灰色 N/A,不破图。
+    // no-store:与限流分支同口径,防 CDN 把瞬时失败缓存一小时毒化真徽章。
     return {
       status: 200,
-      headers: { ...baseHeaders, "X-Cache": "BYPASS" },
+      headers: {
+        "Content-Type": "image/svg+xml; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Cache": "BYPASS",
+      },
       body: badgeErrorSvg(locale),
     };
   }

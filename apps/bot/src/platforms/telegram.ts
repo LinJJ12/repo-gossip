@@ -1,6 +1,7 @@
 import { Bot, InlineKeyboard } from "grammy";
 import {
   LOOSE_REPO_PATTERN,
+  llmDegradedNote,
   matchLooseRepo,
   missingSignalLabel,
   parseCompareRepos,
@@ -12,11 +13,33 @@ import { busyReplyText, consumeBotUserLimit } from "../rate-guard.js";
 
 const MAX_TELEGRAM_TEXT = 3500;
 
+// Telegram webhook/轮询都是 at-least-once:平台超时重投会重跑完整管线。
+// 进程内按 chat:message 去重,保留最近 500 条覆盖重投窗口。
+const seenDeliveryKeys = new Set<string>();
+const SEEN_DELIVERY_KEYS_MAX = 500;
+
 export function createTelegramBot(
   token: string,
   options?: { offline?: boolean },
 ) {
   const bot = new Bot(token);
+
+  bot.use(async (ctx, next) => {
+    const messageId = ctx.message?.message_id;
+    const chatId = ctx.chat?.id;
+    if (messageId != null && chatId != null) {
+      const key = `${chatId}:${messageId}`;
+      if (seenDeliveryKeys.has(key)) return; // 重复投递,丢弃
+      seenDeliveryKeys.add(key);
+      if (seenDeliveryKeys.size > SEEN_DELIVERY_KEYS_MAX) {
+        for (const k of seenDeliveryKeys) {
+          seenDeliveryKeys.delete(k);
+          if (seenDeliveryKeys.size <= SEEN_DELIVERY_KEYS_MAX / 2) break;
+        }
+      }
+    }
+    await next();
+  });
 
   bot.command("start", async (ctx) => {
     await ctx.reply(
@@ -109,7 +132,7 @@ export function parseGossipArgs(
   const cleaned = arg.replace(/\s--offline\b/i, "").trim();
   const m = cleaned.match(LOOSE_REPO_PATTERN);
   if (!m) return null;
-  const repo = m[1]!;
+  const repo = `${m[1]}/${m[2].replace(/\.+$/, "")}`;
   // 用正则命中的结束位置切尾参,避免 repo 字符串在文本里更早出现时错切。
   const rest = cleaned.slice(m.index! + m[0].length).trim();
   const daysMatch = rest.match(/^(\d{1,2})\b/);
@@ -142,7 +165,7 @@ async function replyGossip(
     );
     const notes = [
       mode !== "llm" ? `[mode=${mode}]` : null,
-      llmError,
+      llmDegradedNote(llmError),
       ...(warnings ?? []),
     ]
       .filter(Boolean)

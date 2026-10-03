@@ -83,8 +83,12 @@ export function resolveDetailBudget(explicit?: number): number {
   if (typeof explicit === "number" && Number.isFinite(explicit) && explicit >= 0) {
     return Math.floor(explicit);
   }
-  const fromEnv = Number(process.env.GOSSIP_MAX_COMMIT_DETAILS);
-  if (Number.isFinite(fromEnv) && fromEnv >= 0) return Math.floor(fromEnv);
+  // Number("") === 0 会把"未设置"静默当成 0,禁用全部 commit 详情 —— 空串视为未设置。
+  const rawEnv = process.env.GOSSIP_MAX_COMMIT_DETAILS?.trim();
+  if (rawEnv) {
+    const fromEnv = Number(rawEnv);
+    if (Number.isFinite(fromEnv) && fromEnv >= 0) return Math.floor(fromEnv);
+  }
   return DEFAULT_MAX_COMMIT_DETAILS;
 }
 

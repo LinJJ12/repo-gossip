@@ -20,6 +20,31 @@ const BADGE_PATH_RE = /^\/api\/badge\/([^/]+)\/([^/]+?)(?:\.svg)?$/;
 const GOSSIP_PATH_RE = /^\/api\/gossip(?:$|[/?])/;
 
 /**
+ * dev 中间件仅监听本机,但恶意网页可从浏览器直接打 localhost:5173(CORS 默认
+ * 全开)。带 Origin 的跨站请求(除本扩展)一律 403,防止外部页面借 dev 服务器
+ * 发 BYOK 覆写头;curl / 同源 fetch / 无 Origin 的请求不受影响。
+ */
+function isCrossSiteBrowserRequest(
+  req: { headers: Record<string, string | string[] | undefined> },
+  url: string,
+): boolean {
+  const originHeader = req.headers.origin;
+  const origin = Array.isArray(originHeader) ? originHeader[0] : originHeader;
+  if (!origin) return false;
+  if (origin.startsWith("chrome-extension://")) return false;
+  let originHost: string;
+  try {
+    originHost = new URL(origin).host;
+  } catch {
+    return true;
+  }
+  const hostHeader = req.headers.host;
+  const host = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
+  // 绝对 URL 形式的请求行(Vite 代理场景)从 url 里也取不到可信 host,以 Host 头为准。
+  return originHost !== (host ?? new URL(url, "http://localhost").host);
+}
+
+/**
  * dev 环境的 /api/* 与生产(api/*.ts)共用 core 的 handleGossipApiRequest /
  * handleBadgeApiRequest —— 这里只做 Node req/res ↔ HttpApiResponse 的协议转换,
  * 路由 / 校验 / 鉴权 / 限流 / 缓存逻辑零拷贝。
@@ -33,6 +58,13 @@ function gossipApiPlugin(): Plugin {
         const badgeMatch = BADGE_PATH_RE.exec(url.split("?")[0] ?? "");
         const isGossip = GOSSIP_PATH_RE.test(url);
         if (!isGossip && !(badgeMatch && req.method === "GET")) return next();
+
+        if (isCrossSiteBrowserRequest(req, url)) {
+          res.statusCode = 403;
+          res.setHeader("Content-Type", "application/json");
+          res.end(JSON.stringify({ error: "cross-site request rejected" }));
+          return;
+        }
 
         let response: HttpApiResponse;
         if (isGossip) {

@@ -263,6 +263,41 @@ describe("computeRepoScore", () => {
     );
   });
 
+  it("同秒注入:微模式折入含水量并进 sanity 证据列表", () => {
+    const injected = [
+      ...Array.from({ length: 50 }, (_, i) =>
+        new Date(Date.now() - i * 86_400_000).toISOString(),
+      ),
+      // 同一秒 6 个批量注入
+      ...Array.from({ length: 6 }, () =>
+        new Date(Date.now() - 100_000).toISOString(),
+      ),
+    ];
+    const score = computeRepoScore(
+      richInput({
+        stars: 2_000,
+        forks: 100,
+        starredAt: injected,
+        stargazerIds: injected.map((_, i) =>
+          i >= 50 ? 900_000 + (i - 50) : 1_000_000 + i * 10_000,
+        ),
+      }),
+    );
+    assert.ok(
+      score.sanity.some((c) => c.id === "micro-same-second-cluster"),
+      JSON.stringify(score.sanity.map((c) => c.id)),
+    );
+    assert.ok(
+      score.watermark.notes.some((n) => n.includes("同秒注入")),
+      JSON.stringify(score.watermark.notes),
+    );
+    // 6 连号 id(步长 ≤5)也应命中连号信号
+    assert.ok(
+      score.sanity.some((c) => c.id === "micro-sequential-ids"),
+      JSON.stringify(score.sanity.map((c) => c.id)),
+    );
+  });
+
   it("空仓库(weeklyCommits=[]):活跃度按 0 计,而非当作缺失重分配", () => {
     const score = computeRepoScore(
       richInput({ weeklyCommits: [], mergedPrs90d: 0, releases90d: 0 }),

@@ -83,5 +83,7 @@ export function resolveBadgeRepoParam(
   if (!owner || !repo) return null;
   if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(owner)) return null;
   if (!/^[A-Za-z0-9._-]+$/.test(repo)) return null;
+  // 与 isGithubFullName 同口径:拒绝 ".."、首尾点等纯 404 输入。
+  if (repo.startsWith(".") || repo.endsWith(".")) return null;
   return `${owner}/${repo}`;
 }

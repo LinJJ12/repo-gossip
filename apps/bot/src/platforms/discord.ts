@@ -9,6 +9,7 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import {
+  llmDegradedNote,
   matchLooseRepo,
   missingSignalLabel,
   parseCompareRepos,
@@ -39,26 +40,51 @@ export async function startDiscordBot(
     });
   });
 
-  client.on(Events.InteractionCreate, async (interaction) => {
+  client.on(Events.InteractionCreate, (interaction) => {
+    // EventEmitter 不会等待 async 监听器:任何裸 await 失败都会变成
+    // unhandledRejection 杀死常驻进程。整体收敛到一个带兜底的 Promise。
     if (!interaction.isChatInputCommand()) return;
-    const guard = consumeBotUserLimit(
-      interaction.user?.id ?? "unknown",
-    );
-    if (!guard.ok) {
-      await interaction.reply(busyReplyText(guard.retryAfterSec));
-      return;
-    }
-    if (interaction.commandName === "gossip") {
-      await handleGossip(interaction, options?.offline);
-    } else if (interaction.commandName === "score") {
-      await handleScore(interaction);
-    } else if (interaction.commandName === "compare") {
-      await handleCompare(interaction);
-    }
+    void runInteraction(interaction, options).catch((err) => {
+      console.error("Discord interaction handling failed:", err);
+    });
   });
 
   await client.login(token);
   return client;
+}
+
+/** 交互回复兜底:优先 editReply(已 defer/reply 时),失败静默(token 过期等)。 */
+async function safeReply(
+  interaction: ChatInputCommandInteraction,
+  content: string | { content?: string; embeds?: unknown[] },
+): Promise<void> {
+  try {
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply(content as never);
+    } else {
+      await interaction.reply(content as never);
+    }
+  } catch {
+    // interaction token 过期 / 频道被删等 —— 记录即可,不能再抛。
+  }
+}
+
+async function runInteraction(
+  interaction: ChatInputCommandInteraction,
+  options?: { offline?: boolean },
+) {
+  const guard = consumeBotUserLimit(interaction.user?.id ?? "unknown");
+  if (!guard.ok) {
+    await safeReply(interaction, busyReplyText(guard.retryAfterSec));
+    return;
+  }
+  if (interaction.commandName === "gossip") {
+    await handleGossip(interaction, options?.offline);
+  } else if (interaction.commandName === "score") {
+    await handleScore(interaction);
+  } else if (interaction.commandName === "compare") {
+    await handleCompare(interaction);
+  }
 }
 
 async function registerCommands(token: string, clientId: string) {
@@ -155,7 +181,7 @@ async function handleGossip(
       .setTimestamp(new Date(data.timestamp));
     const notes = [
       mode !== "llm" ? `mode=${mode}` : null,
-      llmError,
+      llmDegradedNote(llmError),
       ...(warnings ?? []),
     ]
       .filter(Boolean)
@@ -166,7 +192,8 @@ async function handleGossip(
       embeds: [embed],
     });
   } catch (err) {
-    await interaction.editReply(
+    await safeReply(
+      interaction,
       `八卦失败:${err instanceof Error ? err.message : String(err)}`,
     );
   }
@@ -190,7 +217,8 @@ async function handleScore(interaction: ChatInputCommandInteraction) {
         .slice(0, MAX_DISCORD_TEXT - missingNote.length) + missingNote,
     });
   } catch (err) {
-    await interaction.editReply(
+    await safeReply(
+      interaction,
       `验金失败:${err instanceof Error ? err.message : String(err)}`,
     );
   }
@@ -203,7 +231,8 @@ async function handleCompare(interaction: ChatInputCommandInteraction) {
   try {
     repos = parseCompareRepos(reposRaw);
   } catch (err) {
-    await interaction.reply(
+    await safeReply(
+      interaction,
       `${err instanceof Error ? err.message : String(err)}\n示例:/compare repos:"vercel/next.js sindresorhus/is"`,
     );
     return;
@@ -215,7 +244,8 @@ async function handleCompare(interaction: ChatInputCommandInteraction) {
       content: message.markdown.slice(0, MAX_DISCORD_TEXT),
     });
   } catch (err) {
-    await interaction.editReply(
+    await safeReply(
+      interaction,
       `对比失败:${err instanceof Error ? err.message : String(err)}`,
     );
   }

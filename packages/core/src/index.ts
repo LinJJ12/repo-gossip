@@ -52,12 +52,15 @@ export type { RepoScoreFetchResult } from "./github-score.js";
 export {
   starSeriesByDay,
   detectStarBursts,
+  detectStarMicroPatterns,
   estimateWatermark,
   watermarkLevelLabel,
   WATERMARK_LEVEL_LABEL,
 } from "./watermark.js";
 export type {
   StarBurst,
+  StarMicroPattern,
+  StarMicroPatternId,
   Watermark,
   WatermarkLevel,
 } from "./watermark.js";
@@ -97,7 +100,12 @@ export type {
 } from "./byok.js";
 
 export { analyzeSnapshot } from "./analyzer.js";
-export { formatTabloid, toDiscordEmbed, toFeishuCard } from "./format.js";
+export {
+  formatTabloid,
+  toDiscordEmbed,
+  toFeishuCard,
+  llmDegradedNote,
+} from "./format.js";
 export {
   createOctokit,
   fetchRepoSnapshot,
@@ -167,12 +175,19 @@ export {
   type BadgeApiInput,
 } from "./http-api.js";
 
-/** 宽松匹配文本中的 owner/repo(bot 平台解析聊天输入用;严格解析请用 parseRepoRef)。 */
+/**
+ * 宽松匹配文本中的 owner/repo(bot 平台解析聊天输入用;严格解析请用 parseRepoRef)。
+ * owner 段要求至少含一个字母且不含点/下划线(贴近 GitHub 用户名规则),
+ * 避免群聊里 "1/2"、"3/4" 之类的任意文本触发完整抓取管线。
+ */
 export const LOOSE_REPO_PATTERN =
-  /(?:https?:\/\/github\.com\/)?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)/;
+  /(?:https?:\/\/github\.com\/)?((?=[A-Za-z0-9-]*[A-Za-z])[A-Za-z0-9-]{1,39})\/([A-Za-z0-9._-]{1,100})/;
 
 /** 从任意文本中提取第一个 owner/repo;严格解析交给 parseRepoRef。 */
 export function matchLooseRepo(text: string): string | null {
   const m = text.match(LOOSE_REPO_PATTERN);
-  return m ? m[1]! : null;
+  if (!m) return null;
+  // 剥掉句尾标点带出的尾点(“看 facebook/react.”),repo 段不吃句读。
+  const repo = m[2].replace(/\.+$/, "");
+  return repo ? `${m[1]}/${repo}` : null;
 }

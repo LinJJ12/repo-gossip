@@ -168,8 +168,15 @@ async function fetchGossip(repo) {
     if (u.protocol !== "http:" && u.protocol !== "https:") {
       throw new Error("API Base URL 仅支持 http/https");
     }
+    // BYOK 密钥会明文随请求发出:远程地址强制 https,本机 localhost 除外。
+    const isLoopback =
+      u.hostname === "localhost" || /^127(?:\.\d{1,3}){3}$/.test(u.hostname);
+    if (u.protocol === "http:" && !isLoopback) {
+      throw new Error("API Base URL 为远程地址时必须使用 https");
+    }
   } catch (err) {
     if (err instanceof Error && err.message.includes("仅支持")) throw err;
+    if (err instanceof Error && err.message.includes("必须使用")) throw err;
     throw new Error("API Base URL 无效");
   }
 
@@ -187,18 +194,29 @@ async function fetchGossip(repo) {
 
   const days = Math.min(90, Math.max(1, Number(settings.days) || 14));
 
-  const res = await fetch(`${base}/api/gossip`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      repo: repo.trim(),
-      days,
-      offline: Boolean(settings.offline),
-      format: "web",
-    }),
-    // MV3 service worker 常驻;不设超时会让弹层转圈到天荒地老。
-    signal: AbortSignal.timeout(60_000),
-  });
+  let res;
+  try {
+    res = await fetch(`${base}/api/gossip`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        repo: repo.trim(),
+        days,
+        offline: Boolean(settings.offline),
+        format: "web",
+      }),
+      // MV3 service worker 常驻;不设超时会让弹层转圈到天荒地老。
+      signal: AbortSignal.timeout(60_000),
+    });
+  } catch (err) {
+    // TypeError 多为网络/CORS 失败:manifest 已收敛权限,提示重存设置按需授权。
+    if (err instanceof TypeError) {
+      throw new Error(
+        "无法连接 API(Base URL 无效、服务未启动,或未授权该站点 —— 请到设置里重新保存 API Base URL)",
+      );
+    }
+    throw err;
+  }
 
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {

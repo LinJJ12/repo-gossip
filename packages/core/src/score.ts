@@ -1,6 +1,7 @@
 import type { PlatformMessage, RepoRef, ScoreLocale } from "./types.js";
 import {
   detectStarBursts,
+  detectStarMicroPatterns,
   estimateWatermark,
   watermarkLevelLabel,
   type Watermark,
@@ -57,6 +58,10 @@ export type RepoScoreInput = {
    * null = 抓取失败或未抓取(见 starTimelineSkipped)。
    */
   starredAt: string[] | null;
+  /** 与 starredAt 按下标对齐的 stargazer 账号 id(微模式连号检测用;不可得为 null)。 */
+  stargazerIds?: (number | null)[];
+  /** 与 starredAt 按下标对齐的 stargazer login(微模式农场检测用)。 */
+  stargazerLogins?: (string | null)[];
   /** true = 因 star 不足主动跳过时间线抓取(不算缺失信号)。 */
   starTimelineSkipped: boolean;
   /** 抓取阶段确认缺失的信号 id(用于置信度扣减)。 */
@@ -509,13 +514,16 @@ function buildCommunity(input: RepoScoreInput, locale: ScoreLocale): ScoreDimens
   }
 
   if (input.closedIssues90d !== null && input.openIssues !== null) {
-    const throughput =
-      input.closedIssues90d / (input.closedIssues90d + input.openIssues);
-    subs.push({
-      weight: 0.25,
-      score: ratioScale(throughput, 0.5),
-      line: `${tx(STR.issueCloseRate, locale)} ${Math.round(throughput * 100)}%`,
-    });
+    const denom = input.closedIssues90d + input.openIssues;
+    if (denom > 0) {
+      const throughput = input.closedIssues90d / denom;
+      subs.push({
+        weight: 0.25,
+        score: ratioScale(throughput, 0.5),
+        line: `${tx(STR.issueCloseRate, locale)} ${Math.round(throughput * 100)}%`,
+      });
+    }
+    // denom === 0(仓库未启用 issue / 完全无 issue)时不输出该子信号,避免 0/0 → NaN%。
   }
 
   const { score, lines } = combineSubscales(subs);
@@ -745,9 +753,16 @@ export function computeRepoScore(
 ): RepoScore {
   const { dimension: credibility, checks } = buildSanity(input, locale);
 
-  // 含水量:时序突发 + 比例异常合成,非 clean 时按 60% 折算进信用度扣分。
+  // 含水量:时序突发 + 微模式证据 + 比例异常合成,非 clean 时按 60% 折算进信用度扣分。
   const seriesCovered = (input.starredAt?.length ?? 0) > 0;
   const bursts = seriesCovered ? detectStarBursts(input.starredAt!) : null;
+  const microPatterns = seriesCovered
+    ? detectStarMicroPatterns(
+        input.starredAt!,
+        input.stargazerIds,
+        input.stargazerLogins,
+      )
+    : null;
   const warnCount = checks.filter((c) => c.level === "warn").length;
   const failCount = checks.filter((c) => c.level === "fail").length;
   const timelineStatus: "covered" | "skipped" | "failed" = seriesCovered
@@ -761,7 +776,19 @@ export function computeRepoScore(
     failCount,
     timelineStatus,
     locale,
+    microPatterns,
   );
+  // 微模式证据进 sanity 展示列表(先计数后追加,避免与 estimateWatermark 双重计分)。
+  if (microPatterns) {
+    for (const hit of microPatterns) {
+      checks.push({
+        id: `micro-${hit.id}`,
+        label: locale === "en" ? "star pattern" : "star 模式",
+        level: "warn",
+        detail: locale === "en" ? hit.en : hit.zh,
+      });
+    }
+  }
   if (watermark.level !== "clean") {
     credibility.score =
       credibility.score === null

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   detectStarBursts,
+  detectStarMicroPatterns,
   estimateWatermark,
   starSeriesByDay,
 } from "../packages/core/src/watermark.js";
@@ -111,5 +112,98 @@ describe("estimateWatermark", () => {
     // 抓取失败(接口受限/未认证)
     const w3 = estimateWatermark(null, 0, 0, "failed");
     assert.match(w3.notes[0]!, /暂不可用/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 微模式检测(参考 fake-star-audit:同秒注入 / 短窗堆量 / 间隔机械化 / 连号 / 农场)
+// ---------------------------------------------------------------------------
+
+describe("detectStarMicroPatterns", () => {
+  function isoAt(ms: number): string {
+    return new Date(ms).toISOString();
+  }
+
+  it("样本不足(<30)返回 null 不判定", () => {
+    const few = Array.from({ length: 10 }, (_, i) => isoAt(1_000_000 + i));
+    assert.equal(detectStarMicroPatterns(few), null);
+  });
+
+  it("平稳分散的真人时间线无命中", () => {
+    // 60 个 star 均匀散布在 60 天(间隔 1 天),id 随机大步长,登录名各异
+    const t0 = Date.now();
+    const times = Array.from({ length: 60 }, (_, i) => isoAt(t0 - i * 86_400_000));
+    const ids = Array.from({ length: 60 }, (_, i) => 1_000_000 + i * 5_000);
+    const logins = Array.from({ length: 60 }, (_, i) => `human${i}abc`);
+    assert.deepEqual(detectStarMicroPatterns(times, ids, logins), []);
+  });
+
+  it("同一秒批量注入 → same-second-cluster", () => {
+    const t0 = Date.now();
+    // 60 个正常 + 峰值同一秒 6 个
+    const times = [
+      ...Array.from({ length: 60 }, (_, i) => isoAt(t0 - i * 86_400_000)),
+      ...Array.from({ length: 6 }, () => isoAt(t0 - 100_000)),
+    ];
+    const hits = detectStarMicroPatterns(times);
+    assert.ok(hits?.some((h) => h.id === "same-second-cluster"));
+  });
+
+  it("30 秒滑窗堆量 → tight-window-cluster", () => {
+    const t0 = Date.now();
+    const times = [
+      ...Array.from({ length: 60 }, (_, i) => isoAt(t0 - i * 86_400_000)),
+      // 30 秒内 9 个(分散在不同秒,不触发同秒)
+      ...Array.from({ length: 9 }, (_, i) => isoAt(t0 - 200_000 + i * 3_000)),
+    ];
+    const hits = detectStarMicroPatterns(times);
+    assert.ok(hits?.some((h) => h.id === "tight-window-cluster"));
+  });
+
+  it("间隔机械化(匀速高频)→ regular-intervals", () => {
+    const t0 = Date.now();
+    // 每 60 秒一颗,共 60 颗:中位间隔 60s < 90s,CV = 0
+    const times = Array.from({ length: 60 }, (_, i) => isoAt(t0 - i * 60_000));
+    const hits = detectStarMicroPatterns(times);
+    assert.ok(hits?.some((h) => h.id === "regular-intervals"));
+  });
+
+  it("账号 id 近乎连号 → sequential-ids", () => {
+    const t0 = Date.now();
+    const times = Array.from({ length: 40 }, (_, i) => isoAt(t0 - i * 3_600_000));
+    // 前 5 个(时间上连续)账号 id 步长 1
+    const ids = times.map((_, i) =>
+      i < 5 ? 900_000 + i : 1_000_000 + i * 10_000,
+    );
+    const hits = detectStarMicroPatterns(times, ids);
+    assert.ok(hits?.some((h) => h.id === "sequential-ids"));
+  });
+
+  it("同一天同基础名数字尾巴 → login-farm-cluster", () => {
+    const t0 = Date.now();
+    const times = [
+      ...Array.from({ length: 30 }, (_, i) => isoAt(t0 - i * 86_400_000)),
+      // 同一天 6 个 farm 账号
+      ...Array.from({ length: 6 }, (_, i) => isoAt(t0 - 500_000 + i)),
+    ];
+    const logins = [
+      ...Array.from({ length: 30 }, (_, i) => `normal${i}user`),
+      ...Array.from({ length: 6 }, (_, i) => `farmbot${100 + i}`),
+    ];
+    const hits = detectStarMicroPatterns(times, undefined, logins);
+    assert.ok(hits?.some((h) => h.id === "login-farm-cluster"));
+  });
+
+  it("微模式命中折入含水量:每个 +12 且落 note", () => {
+    const t0 = Date.now();
+    const times = [
+      ...Array.from({ length: 60 }, (_, i) => isoAt(t0 - i * 86_400_000)),
+      ...Array.from({ length: 6 }, () => isoAt(t0 - 100_000)),
+    ];
+    const hits = detectStarMicroPatterns(times);
+    const clean = estimateWatermark([], 0, 0, "covered");
+    const withHits = estimateWatermark([], 0, 0, "covered", "zh", hits);
+    assert.equal(withHits.percent, clean.percent + 12 * hits!.length);
+    assert.ok(withHits.notes.some((n) => n.includes("同秒注入")));
   });
 });

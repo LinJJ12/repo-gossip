@@ -7,8 +7,11 @@
   "host_permissions": [
     "https://github.com/*",
     "http://localhost/*",
-    "http://127.0.0.1/*",
-    "https://*/*"
+    "http://127.0.0.1/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
   ],
   "background": {
     "service_worker": "background.js"

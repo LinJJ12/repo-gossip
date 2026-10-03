@@ -356,7 +356,7 @@ describe("handleBadgeApiRequest · 永不破图", () => {
     assert.equal(calls, 1);
   });
 
-  it("runner 失败 → 200 灰色 N/A 徽章", async () => {
+  it("runner 失败 → 200 灰色 N/A 徽章 + no-store(瞬时失败不毒化 CDN)", async () => {
     const res = await handleBadgeApiRequest({
       method: "GET",
       owner: "a",
@@ -370,6 +370,54 @@ describe("handleBadgeApiRequest · 永不破图", () => {
     assert.equal(res.status, 200);
     assert.match(res.body, /N\/A/);
     assert.equal(res.headers["X-Cache"], "BYPASS");
+    assert.equal(res.headers["Cache-Control"], "no-store");
+  });
+
+  it("internal 调用的 llmError 明细不进公开缓存(隔离 internal 缓存键)", async () => {
+    process.env.WEBHOOK_SECRET = "s3cret";
+    const deps: GossipApiDeps = {
+      runGossip: async () =>
+        ({
+          tabloid: { epicTitle: "八卦" },
+          message: { plain: "plain", markdown: "**md**" },
+          mode: "fallback",
+          llmError: "LLM request failed 500: internal-quota=org-secret",
+          warnings: [],
+        }) as Awaited<ReturnType<NonNullable<GossipApiDeps["runGossip"]>>>,
+    };
+
+    // internal(带正确密钥)→ 明细保留
+    const internal = await handleGossipApiRequest(
+      postReq('{"repo":"a/b","format":"markdown"}', {
+        authorization: "Bearer s3cret",
+      }),
+      deps,
+    );
+    assert.equal(internal.status, 200);
+    assert.match(internal.body, /internal-quota=org-secret/);
+
+    // 公开请求:不得经缓存拿到 internal 明细;返回脱敏文案
+    const pub = await handleGossipApiRequest(
+      postReq('{"repo":"a/b","format":"markdown"}'),
+      deps,
+    );
+    assert.equal(pub.status, 200);
+    assert.ok(!pub.body.includes("internal-quota"), pub.body);
+    assert.match(pub.body, /LLM 暂不可用/);
+  });
+
+  it("lang 不同的 score 请求不共享缓存(zh/en 互不覆盖)", async () => {
+    const calls: { score?: number } = {};
+    const deps = fakeDeps(calls);
+    await handleGossipApiRequest(
+      postReq('{"repo":"a/b","mode":"score","lang":"en"}'),
+      deps,
+    );
+    await handleGossipApiRequest(
+      postReq('{"repo":"a/b","mode":"score","lang":"zh"}'),
+      deps,
+    );
+    assert.equal(calls.score, 2);
   });
 
   it("超过徽章 IP 限额 → 200 N/A + Retry-After + no-store", async () => {

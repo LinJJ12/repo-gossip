@@ -1,10 +1,13 @@
+import { createHash } from "node:crypto";
 import {
+  llmDegradedNote,
   matchLooseRepo,
   missingSignalLabel,
   parseCompareRepos,
   runCompare,
   runGossip,
   runScore,
+  secretEqual,
   toFeishuCard,
 } from "@repo-gossip/core";
 import { busyReplyText, consumeBotUserLimit } from "../rate-guard.js";
@@ -33,12 +36,42 @@ export class FeishuAuthError extends Error {
   }
 }
 
+/**
+ * 飞书开放平台签名验证(需要配置 encrypt_key):
+ * X-Lark-Signature = sha256(timestamp + nonce + encrypt_key + body) 的 hex。
+ * 静态 verification_token 是长期明文口令,配置了 encrypt_key 后以签名为准。
+ */
+export function verifyFeishuSignature(
+  rawBody: string,
+  headers: Record<string, string | string[] | undefined>,
+  encryptKey: string,
+): boolean {
+  const pick = (name: string): string | undefined => {
+    const v = headers[name] ?? headers[name.toLowerCase()];
+    return Array.isArray(v) ? v[0] : v;
+  };
+  const signature = pick("x-lark-signature")?.trim();
+  const timestamp = pick("x-lark-request-timestamp")?.trim();
+  const nonce = pick("x-lark-request-nonce")?.trim();
+  if (!signature || timestamp === undefined || nonce === undefined) {
+    return false;
+  }
+  const expected = createHash("sha256")
+    .update(`${timestamp}${nonce}${encryptKey}${rawBody}`)
+    .digest("hex");
+  return secretEqual(signature, expected);
+}
+
 export function handleFeishuChallenge(
   body: FeishuEvent,
   verificationToken?: string,
 ): { challenge: string } | null {
   if (body.type === "url_verification" && body.challenge) {
-    if (verificationToken && body.token !== verificationToken) {
+    if (
+      verificationToken &&
+      (typeof body.token !== "string" ||
+        !secretEqual(body.token, verificationToken))
+    ) {
       throw new FeishuAuthError();
     }
     return { challenge: body.challenge };
@@ -60,13 +93,15 @@ function resolveReceiveTarget(body: FeishuEvent): ReceiveTarget | null {
 
 // 飞书事件投递是 at-least-once:同一条 message_id 的重放不去重会重复跑完整管线
 // (GitHub + LLM 开销、限流额度)。进程内保留最近 500 条即可覆盖重放窗口。
+// claim → release 语义:处理失败时释放,让飞书重投能真正重跑,不吞掉用户回复。
 const seenMessageIds = new Set<string>();
 const SEEN_MESSAGE_IDS_MAX = 500;
 
-function isDuplicateMessage(body: FeishuEvent): boolean {
+/** 首次见到返回释放函数(失败时调用);重复投递返回 null。 */
+function claimMessageId(body: FeishuEvent): (() => void) | null {
   const messageId = body.event?.message?.message_id;
-  if (!messageId) return false;
-  if (seenMessageIds.has(messageId)) return true;
+  if (!messageId) return () => {};
+  if (seenMessageIds.has(messageId)) return null;
   seenMessageIds.add(messageId);
   if (seenMessageIds.size > SEEN_MESSAGE_IDS_MAX) {
     // 简单淘汰:清掉一半,保持常量内存。
@@ -75,7 +110,7 @@ function isDuplicateMessage(body: FeishuEvent): boolean {
       if (seenMessageIds.size <= SEEN_MESSAGE_IDS_MAX / 2) break;
     }
   }
-  return false;
+  return () => seenMessageIds.delete(messageId);
 }
 
 export async function handleFeishuMessage(
@@ -88,7 +123,8 @@ export async function handleFeishuMessage(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const contentRaw = body.event?.message?.content;
   if (!contentRaw) return { ok: true };
-  if (isDuplicateMessage(body)) return { ok: true };
+  const releaseMessage = claimMessageId(body);
+  if (releaseMessage === null) return { ok: true };
 
   let text = "";
   try {
@@ -111,6 +147,15 @@ export async function handleFeishuMessage(
     return { ok: true };
   }
 
+  const runReply = async (
+    fn: () => Promise<{ ok: true } | { ok: false; error: string }>,
+  ): Promise<{ ok: true } | { ok: false; error: string }> => {
+    const result = await fn();
+    // 管线失败 → 释放去重标记,飞书 at-least-once 重投时还能重试。
+    if (!result.ok) releaseMessage();
+    return result;
+  };
+
   // 文本命令:score / 验金 → 检定;compare / 对比 → 对比;裸链接 → 八卦小报。
   const scoreMatch = text.match(/^(?:score|验金)\s+(.+)/i);
   if (scoreMatch) {
@@ -119,7 +164,7 @@ export async function handleFeishuMessage(
       await sendFeishuText(options, target, "请附上仓库,例如:score vercel/next.js");
       return { ok: true };
     }
-    return replyScore(options, target, repo);
+    return runReply(() => replyScore(options, target, repo));
   }
 
   const compareMatch = text.match(/^(?:compare|对比)\s+(.+)/i);
@@ -135,7 +180,7 @@ export async function handleFeishuMessage(
       );
       return { ok: true };
     }
-    return replyCompare(options, target, repos);
+    return runReply(() => replyCompare(options, target, repos));
   }
 
   const repo = matchLooseRepo(text);
@@ -147,7 +192,7 @@ export async function handleFeishuMessage(
     );
     return { ok: true };
   }
-  return replyGossip(options, target, repo, options.offline ?? false);
+  return runReply(() => replyGossip(options, target, repo, options.offline ?? false));
 }
 
 async function replyGossip(
@@ -162,8 +207,9 @@ async function replyGossip(
       repo,
       offline,
     });
-    if (mode !== "llm" && llmError) {
-      await sendFeishuText(options, target, `[${mode}] ${llmError}`);
+    const note = mode !== "llm" ? llmDegradedNote(llmError) : undefined;
+    if (note) {
+      await sendFeishuText(options, target, `[${mode}] ${note}`);
     }
     await sendFeishuCard(options, target, toFeishuCard(tabloid));
     return { ok: true } as const;

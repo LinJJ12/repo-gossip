@@ -37,11 +37,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    const handle = webhookCallback(getBot(), "https");
+    // grammy webhook 默认 10s 超时且超时即 throw:与 LLM 20s 管线冲突,还会对
+    // 已写回的响应再写 500。这里放宽到 30s;超时后 handler.end() 回空 200,
+    // 响应由业务经 API 主动回复,Telegram 重投由进程内 message 去重兜底。
+    const handle = webhookCallback(getBot(), "https", {
+      timeoutMilliseconds: 30_000,
+      onTimeout: "return",
+    });
     await handle(req, res);
   } catch (err) {
     // 与 core http-api 同口径:500 统一脱敏,细节只进服务端日志。
     console.error("[api/telegram] internal error:", err);
+    if (res.headersSent) {
+      res.end();
+      return;
+    }
     res.status(500).json({ error: "internal error" });
   }
 }

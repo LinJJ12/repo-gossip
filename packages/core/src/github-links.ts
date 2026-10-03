@@ -73,7 +73,9 @@ export function splitGithubLinkParts(
   text: string,
   opts: LinkifyOpts = {},
 ): LinkifyPart[] {
-  const source = String(text);
+  // 攻击者文本可自带 \uE000<id>\uE001 伪造标记(替换成真锚点/吞掉文本段),
+  // 标记前先剥离私有区控制字符。
+  const source = String(text).replace(/[\uE000\uE001]/g, "");
   if (!source) return [];
 
   type Slot = { kind: "repo" | "user"; value: string };

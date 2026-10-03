@@ -1,10 +1,10 @@
 /**
  * 含水量检测(反刷星信号)— 纯函数,无网络调用。
  *
- * 思路参考 StarScout 研究(arXiv:2412.13459,~600 万疑似假 star):
- * 刷量仓库在 star 时间线上呈「突发窗口」形态(短时间大量 star,与基线严重
- * 脱离),并伴随跨信号比例异常(高 star / 低贡献者 / 低互动)。本模块只做
- * 时序突发检测 + 与 P0 比例检查的合成,不做账号级指控。
+ * 思路参考 StarScout 研究(arXiv:2412.13459,~600 万疑似假 star)与开源实现
+ * fake-star-audit / StarMapper:刷量仓库在 star 时间线上呈「突发窗口」形态
+ * (短时间大量 star,与基线严重脱离),并伴随跨信号比例异常(高 star /
+ * 低贡献者 / 低互动)。本模块只做时序突发 + 微模式检测与合成,不做账号级指控。
  */
 
 import type { ScoreLocale } from "./types.js";
@@ -138,8 +138,183 @@ function medianOf(xs: number[]): number {
     : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
+// ---------------------------------------------------------------------------
+// 微模式检测(证据级信号,参考 fake-star-audit 的五信号设计):
+// 同一份数据就能算,无需额外 API 调用。全部保守判定,只报告统计模式,
+// 不指控任何账号 —— 单一信号命中只构成 warn 级证据。
+// ---------------------------------------------------------------------------
+
+export type StarMicroPatternId =
+  | "same-second-cluster"
+  | "tight-window-cluster"
+  | "regular-intervals"
+  | "sequential-ids"
+  | "login-farm-cluster";
+
+export type StarMicroPattern = {
+  id: StarMicroPatternId;
+  zh: string;
+  en: string;
+};
+
+/** 有效样本下限:太短的时间线在这些统计上没有意义。 */
+const MICRO_MIN_SAMPLES = 30;
+/** 同一秒最多可接受的自然星数;超过视为批量注入。 */
+const SAME_SECOND_MIN = 5;
+/** 滑窗堆量:窗口长度与最少星数(自然爆发不至于 30 秒 8 星)。 */
+const TIGHT_WINDOW_SEC = 30;
+const TIGHT_WINDOW_MIN = 8;
+/** 间隔规律性:样本量、中位间隔上限(高频)与变异系数上限(机械匀速)。 */
+const REGULAR_MIN_GAPS = 40;
+const REGULAR_MEDIAN_GAP_MS = 90_000;
+const REGULAR_CV_MAX = 0.2;
+/** 连号检测:相邻账号 id 差 ≤ SEQ_MAX_STEP 的连续链 ≥ SEQ_MIN_CHAIN。 */
+const SEQ_MIN_CHAIN = 4;
+const SEQ_MAX_STEP = 5;
+/** 昵称农场:同一天同基础名(剥尾部数字)+ 数字尾巴的账号数。 */
+const FARM_MIN_GROUP = 5;
+const FARM_MIN_BASE_LEN = 3;
+
+/**
+ * star 时间线微模式检测。
+ * @param starredAt ISO 时间戳数组(与 ids/logins 按下标对齐,可为不同长度)
+ * @param stargazerIds 对应 stargazer 的 user.id(不可得为 null;无则跳过连号检测)
+ * @param stargazerLogins 对应 stargazer 的 user.login(不可得为 null;无则跳过农场检测)
+ * @returns 命中的信号列表(可为空);时间线样本不足时返回 null(不判定、不加分)
+ */
+export function detectStarMicroPatterns(
+  starredAt: string[],
+  stargazerIds?: (number | null)[],
+  stargazerLogins?: (string | null)[],
+): StarMicroPattern[] | null {
+  const times: number[] = [];
+  for (const raw of starredAt) {
+    const t = Date.parse(raw);
+    if (Number.isFinite(t)) times.push(t);
+  }
+  if (times.length < MICRO_MIN_SAMPLES) return null;
+  times.sort((a, b) => a - b);
+
+  const hits: StarMicroPattern[] = [];
+
+  // 同秒注入:精确相同秒级时间戳的峰值。
+  const perSecond = new Map<number, number>();
+  for (const t of times) {
+    const sec = Math.floor(t / 1000);
+    perSecond.set(sec, (perSecond.get(sec) ?? 0) + 1);
+  }
+  const sameSecondPeak = Math.max(...perSecond.values());
+  if (sameSecondPeak >= SAME_SECOND_MIN) {
+    hits.push({
+      id: "same-second-cluster",
+      zh: `同秒注入:峰值同一秒 ${sameSecondPeak} 个 star,自然增长几乎不可能`,
+      en: `same-second injection: up to ${sameSecondPeak} stars within a single second`,
+    });
+  }
+
+  // 短窗堆量:30 秒滑窗最大计数(双指针)。
+  let tightPeak = 0;
+  let i = 0;
+  for (let j = 0; j < times.length; j++) {
+    while (times[j]! - times[i]! > TIGHT_WINDOW_SEC * 1000) i += 1;
+    tightPeak = Math.max(tightPeak, j - i + 1);
+  }
+  if (tightPeak >= TIGHT_WINDOW_MIN) {
+    hits.push({
+      id: "tight-window-cluster",
+      zh: `短窗堆量:${TIGHT_WINDOW_SEC} 秒内最多 ${tightPeak} 个 star`,
+      en: `tight-window spike: up to ${tightPeak} stars within ${TIGHT_WINDOW_SEC}s`,
+    });
+  }
+
+  // 间隔机械化:中位间隔短且变异系数极低 —— 真人星是爆发且不规则的。
+  const gaps: number[] = [];
+  for (let k = 1; k < times.length; k++) {
+    const gap = times[k]! - times[k - 1]!;
+    if (gap > 0) gaps.push(gap);
+  }
+  if (gaps.length >= REGULAR_MIN_GAPS) {
+    const medianGap = medianOf(gaps);
+    const meanGap = gaps.reduce((s, g) => s + g, 0) / gaps.length;
+    const variance =
+      gaps.reduce((s, g) => s + (g - meanGap) ** 2, 0) / gaps.length;
+    const cv = meanGap > 0 ? Math.sqrt(variance) / meanGap : 0;
+    if (medianGap < REGULAR_MEDIAN_GAP_MS && cv < REGULAR_CV_MAX) {
+      hits.push({
+        id: "regular-intervals",
+        zh: `间隔机械化:中位间隔 ${Math.round(medianGap / 1000)}s、变异系数 ${cv.toFixed(2)}(真人 star 是爆发且不规则的)`,
+        en: `mechanical cadence: median gap ${Math.round(medianGap / 1000)}s, CV ${cv.toFixed(2)} — human starring is bursty and irregular`,
+      });
+    }
+  }
+
+  // 批量连号:时间相邻的 stargazer 账号 id 近乎连续(批量注册直接刷星)。
+  if (stargazerIds && stargazerIds.length > 0) {
+    let chain = 1;
+    let bestChain = 1;
+    for (let k = 1; k < Math.min(stargazerIds.length, times.length); k++) {
+      const prev = stargazerIds[k - 1];
+      const curr = stargazerIds[k];
+      if (
+        typeof prev === "number" &&
+        typeof curr === "number" &&
+        curr - prev >= 1 &&
+        curr - prev <= SEQ_MAX_STEP
+      ) {
+        chain += 1;
+        bestChain = Math.max(bestChain, chain);
+      } else {
+        chain = 1;
+      }
+    }
+    if (bestChain >= SEQ_MIN_CHAIN) {
+      hits.push({
+        id: "sequential-ids",
+        zh: `批量连号:连续 ${bestChain} 个 star 来自近乎连号的账号(id 步长 ≤${SEQ_MAX_STEP})`,
+        en: `sequential account ids: ${bestChain} consecutive stars from near-sequential account ids`,
+      });
+    }
+  }
+
+  // 昵称农场:同一天出现多个「同基础名 + 数字尾巴」账号。
+  if (stargazerLogins && stargazerLogins.length > 0) {
+    const byDay = new Map<string, Map<string, number>>();
+    for (let k = 0; k < Math.min(stargazerLogins.length, starredAt.length); k++) {
+      const login = stargazerLogins[k];
+      const t = Date.parse(starredAt[k] ?? "");
+      if (typeof login !== "string" || !Number.isFinite(t)) continue;
+      const m = login.match(/^(.+?)(\d+)$/);
+      if (!m || m[1]!.length < FARM_MIN_BASE_LEN) continue;
+      const day = new Date(t).toISOString().slice(0, 10);
+      const bucket = byDay.get(day) ?? new Map<string, number>();
+      bucket.set(m[1]!, (bucket.get(m[1]!) ?? 0) + 1);
+      byDay.set(day, bucket);
+    }
+    let farmBase = "";
+    let farmCount = 0;
+    for (const bucket of byDay.values()) {
+      for (const [base, count] of bucket) {
+        if (count > farmCount) {
+          farmBase = base;
+          farmCount = count;
+        }
+      }
+    }
+    if (farmCount >= FARM_MIN_GROUP) {
+      hits.push({
+        id: "login-farm-cluster",
+        zh: `昵称农场:同一天 ${farmCount} 个「${farmBase}+数字」账号 star`,
+        en: `name farm: ${farmCount} "${farmBase}<n>" accounts starred on the same day`,
+      });
+    }
+  }
+
+  return hits;
+}
+
 /**
  * 信用度 sanity 检查命中数(warn/fail),由 score.ts 传入。
+ * microPatterns 为微模式证据(可选);每个命中 +12 并落一条 note。
  * locale 决定 notes 语言;zh 字符串与历史输出保持字节级一致。
  */
 export function estimateWatermark(
@@ -148,6 +323,7 @@ export function estimateWatermark(
   sanityFails: number,
   timelineStatus: "covered" | "skipped" | "failed",
   locale: ScoreLocale = "zh",
+  microPatterns?: StarMicroPattern[] | null,
 ): Watermark {
   const notes: string[] = [];
   let percent = 0;
@@ -193,6 +369,13 @@ export function estimateWatermark(
             : `疑似堆量窗口 ${b.start} ~ ${b.end}:3 天 +${b.stars} star`,
         );
       }
+    }
+  }
+
+  if (microPatterns) {
+    for (const hit of microPatterns.slice(0, 3)) {
+      percent += 12;
+      notes.push(locale === "en" ? hit.en : hit.zh);
     }
   }
 

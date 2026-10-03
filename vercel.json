@@ -2,6 +2,13 @@
   "version": 2,
   "buildCommand": "npm run web:build",
   "outputDirectory": "apps/web/dist",
+  "functions": {
+    "api/gossip.ts": { "maxDuration": 60 },
+    "api/telegram.ts": { "maxDuration": 60 },
+    "api/feishu.ts": { "maxDuration": 60 },
+    "api/badge/[owner]/[repo].ts": { "maxDuration": 30 },
+    "api/discord.ts": { "maxDuration": 10 }
+  },
   "rewrites": [
     {
       "source": "/((?!api/).*)",

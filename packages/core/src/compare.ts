@@ -2,6 +2,7 @@ import type { PlatformMessage, ScoreLocale } from "./types.js";
 import type { RepoScore, ScoreDimensionId } from "./score.js";
 import { SCORE_DIMENSION_ORDER } from "./score.js";
 import { GRADE_COLORS } from "./badge.js";
+import { isGithubFullName } from "./github-links.js";
 
 /**
  * 仓库对比:2-4 个仓库并排出对照(分项表 + 雷达 SVG)。
@@ -187,7 +188,7 @@ export function formatCompareRadarSvg(
 </svg>`;
 }
 
-/** 规范化对比入参:逗号/空白分隔(字符串或数组逐元素均可),去空,限量。超量抛错(带用量提示)。 */
+/** 规范化对比入参:逗号/空白分隔(字符串或数组逐元素均可),去空,限量,逐个校验格式。超量/非法抛错(带用量提示)。 */
 export function parseCompareRepos(raw: string | string[]): string[] {
   const parts = (Array.isArray(raw) ? raw : [raw])
     .flatMap((s) => s.split(/[,，\s]+/))
@@ -201,6 +202,12 @@ export function parseCompareRepos(raw: string | string[]): string[] {
   if (parts.length > COMPARE_MAX) {
     throw new Error(
       `compare supports at most ${COMPARE_MAX} repos (got ${parts.length})`,
+    );
+  }
+  const invalid = parts.filter((p) => !isGithubFullName(p));
+  if (invalid.length > 0) {
+    throw new Error(
+      `invalid repo(s): ${invalid.join(", ")} — use owner/repo (alphanumerics, . _ - only)`,
     );
   }
   return parts;
