@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   formatBadgeSvg,
+  formatBadgeEndpoint,
   badgeErrorSvg,
+  badgeEndpointError,
   resolveBadgeRepoParam,
+  resolveBadgeRequest,
   badgeTextWidth,
 } from "../packages/core/src/badge.js";
 import { computeRepoScore, type RepoScoreInput } from "../packages/core/src/score.js";
@@ -127,5 +130,113 @@ describe("resolveBadgeRepoParam", () => {
     assert.equal(resolveBadgeRepoParam("-bad-", "repo.svg"), null);
     assert.equal(resolveBadgeRepoParam(undefined, "repo.svg"), null);
     assert.equal(resolveBadgeRepoParam(123, "repo.svg"), null);
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// shields.io endpoint JSON 徽章
+// ---------------------------------------------------------------------------
+
+describe("formatBadgeEndpoint", () => {
+  it("正常评分:schemaVersion/label/message/color 对齐 shields endpoint schema", () => {
+    const score = computeRepoScore(input());
+    const payload = JSON.parse(formatBadgeEndpoint(score)) as {
+      schemaVersion: number;
+      label: string;
+      message: string;
+      color: string;
+    };
+    assert.equal(payload.schemaVersion, 1);
+    assert.equal(payload.label, "含金量");
+    assert.match(payload.message, /^\d+ /);
+    assert.doesNotMatch(payload.color, /^#/);
+    assert.ok(payload.color.length >= 3);
+  });
+
+  it("英文 locale 输出 Gold 标签", () => {
+    const payload = JSON.parse(formatBadgeEndpoint(computeRepoScore(input()), "en")) as {
+      label: string;
+    };
+    assert.equal(payload.label, "Gold");
+  });
+
+  it("total null → N/A + lightgrey(直接构造防御分支)", () => {
+    const score = {
+      ref: REF,
+      fullName: "a/b",
+      total: null,
+      grade: null,
+      confidence: { value: 20, label: "不足" },
+      dimensions: [],
+      sanity: [],
+      watermark: { percent: 0, level: "clean" as const, notes: [] },
+      scoredAt: new Date().toISOString(),
+    };
+    const payload = JSON.parse(formatBadgeEndpoint(score)) as {
+      message: string;
+      color: string;
+    };
+    assert.equal(payload.message, "N/A");
+    assert.equal(payload.color, "lightgrey");
+  });
+
+  it("badgeEndpointError 恒为合法 N/A JSON", () => {
+    const payload = JSON.parse(badgeEndpointError("zh")) as {
+      schemaVersion: number;
+      message: string;
+      color: string;
+    };
+    assert.equal(payload.schemaVersion, 1);
+    assert.equal(payload.message, "N/A");
+    assert.equal(payload.color, "lightgrey");
+  });
+});
+
+describe("resolveBadgeRequest", () => {
+  it("识别 .json 与 .svg 后缀", () => {
+    assert.deepEqual(resolveBadgeRequest("a", "b.json"), {
+      owner: "a",
+      repo: "b",
+      format: "json",
+    });
+    assert.deepEqual(resolveBadgeRequest("a", "b.svg"), {
+      owner: "a",
+      repo: "b",
+      format: "svg",
+    });
+    assert.deepEqual(resolveBadgeRequest("a", "b"), {
+      owner: "a",
+      repo: "b",
+      format: "svg",
+    });
+  });
+
+  it("仓库名本身含 .json 时的歧义约定:后缀路由取尾部格式,双写可消歧", () => {
+    // "foo.json" 静默解析为 repo "foo"(json 格式)—— 后缀路由的固有歧义;
+    // 名为 foo.json 的仓库用双写后缀访问:foo.json.svg → svg,foo.json.json → json。
+    assert.deepEqual(resolveBadgeRequest("o", "foo.json"), {
+      owner: "o",
+      repo: "foo",
+      format: "json",
+    });
+    assert.deepEqual(resolveBadgeRequest("o", "foo.json.svg"), {
+      owner: "o",
+      repo: "foo.json",
+      format: "svg",
+    });
+    assert.deepEqual(resolveBadgeRequest("o", "foo.json.json"), {
+      owner: "o",
+      repo: "foo.json",
+      format: "json",
+    });
+  });
+
+  it("非法输入返回 null(与 resolveBadgeRepoParam 同口径)", () => {
+    assert.equal(resolveBadgeRequest("a", "..json"), null);
+    assert.equal(resolveBadgeRequest("a", ".b.json"), null);
+    assert.equal(resolveBadgeRequest("a", "b|.json"), null);
+    assert.equal(resolveBadgeRequest("", "b.svg"), null);
+    assert.equal(resolveBadgeRequest(123, "b.json"), null);
   });
 });

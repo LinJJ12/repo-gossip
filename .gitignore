@@ -28,3 +28,4 @@ Thumbs.db
 
 # Editor (keep shared recommendations if added later)
 .idea/
+.e2e-tmp/

@@ -298,6 +298,27 @@ describe("computeRepoScore", () => {
     );
   });
 
+  it("工程维度:dep-updater / COC 参照 Scorecard,缺失时子信号退出不误罚", () => {
+    const withBoth = computeRepoScore(richInput({ hasCoc: true, hasDepUpdater: true }));
+    const engLines = JSON.stringify(
+      withBoth.dimensions.find((d) => d.id === "engineering")?.lines,
+    );
+    assert.ok(engLines.includes("✅依赖更新"), engLines);
+    assert.ok(engLines.includes("✅行为准则"), engLines);
+
+    const withNone = computeRepoScore(richInput({ hasCoc: false, hasDepUpdater: false }));
+    const engNone = withNone.dimensions.find((d) => d.id === "engineering");
+    // 其余 6 项全 ✅(0.85 权重),两项 ❌ 按 0 计
+    assert.equal(engNone?.score, 85);
+
+    // 探针失败(字段缺省 = null)→ 子信号退出、权重重归一,不按 0 惩罚
+    const probeFailed = computeRepoScore(richInput({ hasCoc: undefined, hasDepUpdater: undefined }));
+    const engUnknown = probeFailed.dimensions.find((d) => d.id === "engineering");
+    assert.ok(engUnknown !== null && engUnknown.score > 0, `score=${engUnknown?.score}`);
+    const lines = JSON.stringify(engUnknown?.lines ?? []);
+    assert.ok(!lines.includes("依赖更新") && !lines.includes("行为准则"), lines);
+  });
+
   it("空仓库(weeklyCommits=[]):活跃度按 0 计,而非当作缺失重分配", () => {
     const score = computeRepoScore(
       richInput({ weeklyCommits: [], mergedPrs90d: 0, releases90d: 0 }),

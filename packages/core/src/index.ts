@@ -67,7 +67,10 @@ export type {
 
 export {
   formatBadgeSvg,
+  formatBadgeEndpoint,
   badgeErrorSvg,
+  badgeEndpointError,
+  resolveBadgeRequest,
   resolveBadgeRepoParam,
   badgeTextWidth,
   GRADE_COLORS,

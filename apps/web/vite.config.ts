@@ -16,7 +16,9 @@ loadDotenv({ path: path.resolve(repoRoot, ".env") });
 const MAX_BODY_BYTES = 64_000;
 
 class BodyTooLargeError extends Error {}
-const BADGE_PATH_RE = /^\/api\/badge\/([^/]+)\/([^/]+?)(?:\.svg)?$/;
+// 后缀(.svg/.json)不在此剥离,整段传给 core 的 resolveBadgeRequest 统一解析,
+// 否则格式信息在 dev 中间件丢失(.json 会退化成 SVG)。
+const BADGE_PATH_RE = /^\/api\/badge\/([^/]+)\/([^/]+)$/;
 const GOSSIP_PATH_RE = /^\/api\/gossip(?:$|[/?])/;
 
 /**

@@ -51,7 +51,7 @@ Web 预览站顶部一键切换;CLI 用 `--score` / `--compare`;同一引擎,两
 | 🧲 **影响力** | 有多少人真的在用 | star(对数刻度)· fork/star 健康区间 · watcher |
 | 🔥 **活跃度** | 还活着吗 | 周均 commit · 近 4 周/前 8 周动能 · 90 天合并 PR · 发版节奏 |
 | 👥 **社区** | 走了一个撑得住吗 | 贡献者规模 · **Bus Factor**(覆盖 50% 贡献所需人数)· issue 关闭吞吐 |
-| 🔧 **工程** | 靠谱吗 | license · README · CI · CONTRIBUTING · SECURITY · 30 天内推送 |
+| 🔧 **工程** | 靠谱吗 | license · README · CI · CONTRIBUTING · SECURITY · 依赖更新(dependabot/renovate)· 行为准则 · 30 天内推送(信号定义参照 [OpenSSF Scorecard](https://github.com/ossf/scorecard/blob/main/docs/checks.md)) |
 | 🧪 **信用度** | star 是真金还是镀的 | 比例健全性检查 · **含水量检测**(star 时间线突发 + 微模式 + 比例异常) |
 
 **等级**:≥85 足金 🥇 · 70-84 K金 🥈 · 55-69 镀金 🥉 · 40-54 掺水 ⚠️ · <40 贴纸 🧻
@@ -91,7 +91,7 @@ npm run gossip -- vercel/next.js sindresorhus/is --compare   # ⚖️ 双仓对�
 | **Chrome 扩展** | 日常刷 GitHub | [`apps/extension`](apps/extension/README.md) |
 | **Bot** | 群里随手问 | `npm run bot` |
 | **HTTP API** | 自建集成 | `POST /api/gossip` |
-| **README 徽章** | 项目的实时含金量 | `GET /api/badge/:owner/:repo.svg` |
+| **README 徽章** | 项目的实时含金量 | `GET /api/badge/:owner/:repo.svg` · shields 格式 `…/:owner/:repo.json` |
 
 ## 💡 使用说明
 
@@ -195,11 +195,19 @@ curl -X POST https://<domain>/api/gossip \
 
 内部调用可带 `Authorization: Bearer $WEBHOOK_SECRET` 或 `x-webhook-secret`。公开路径有进程内限流与短时缓存(限流按平台注入的客户端 IP 计;自托管无平台头时按 `x-forwarded-for` 尽力而为,可被伪造头绕过,生产建议置于可信反代之后)。
 
-**README 徽章**:把下面这行放进任意项目 README,实时展示其含金量(失败/限流均输出灰色 N/A,永不破图;`?lang=en` 英文;服务端对单 IP 独立限流,防止枚举烧穿 GitHub 配额):
+**README 徽章**:把下面一行放进任意项目 README,实时展示其含金量(失败/限流均输出灰色 N/A,永不破图;`?lang=en` 英文;服务端对单 IP 独立限流,防止枚举烧穿 GitHub 配额):
 
 ```md
 ![含金量](https://<你的部署域名>/api/badge/<owner>/<repo>.svg)
 ```
+
+也可以用 [shields.io](https://shields.io) 的 endpoint 格式挂徽章(渲染/缓存交给 shields):
+
+```md
+![含金量](https://img.shields.io/endpoint?url=https://<你的部署域名>/api/badge/<owner>/<repo>.json&style=flat-square)
+```
+
+> 后缀歧义:仓库名本身以 `.json`/`.svg` 结尾时,双写后缀消歧 —— `foo.json.svg` 是仓库 `foo.json` 的 SVG,`foo.json.json` 是其 shields JSON。
 
 ## ⚙️ 环境变量
 
@@ -233,7 +241,7 @@ flowchart LR
     LLM --> TAB["八卦小报"]
     SCORE --> CERT["检定证书"]
     SCORE --> CMP["⚖️ 多仓对比"]
-    SCORE --> BADGE["README 徽章 SVG"]
+    SCORE --> BADGE["README 徽章 SVG / shields JSON"]
     TAB --> OUT
     CERT --> OUT
     CMP --> OUT

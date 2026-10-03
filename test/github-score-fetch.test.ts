@@ -87,7 +87,7 @@ function makeStub(opts: StubOpts = {}): Octokit {
         if (path === ".github/workflows") return { data: [{ name: "ci.yml" }] };
         if (path === "/") {
           if (contributing === "error") throw { status: 500, message: "boom" };
-          const names = ["LICENSE", "readme.md", "SECURITY.md"];
+          const names = ["LICENSE", "readme.md", "SECURITY.md", "renovate.json", "CODE_OF_CONDUCT.md"];
           if (contributing === "ok") names.push("CONTRIBUTING.md");
           return { data: names.map((name) => ({ name, type: "file" })) };
         }
@@ -144,6 +144,9 @@ describe("fetchRepoScoreInput", () => {
     assert.equal(input.hasReadme, true);
     assert.equal(input.hasContributing, true);
     assert.equal(input.hasSecurity, true);
+    // Scorecard 子集信号(stub 根目录含 renovate.json 与 CODE_OF_CONDUCT.md)
+    assert.equal(input.hasDepUpdater, true);
+    assert.equal(input.hasCoc, true);
   });
 
   it("stats 端点持续 202:weeklyCommits 降级并登记 missing,其余信号不受影响", async () => {

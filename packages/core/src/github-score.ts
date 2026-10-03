@@ -131,6 +131,8 @@ export async function fetchRepoScoreInput(
 
   const hasContributing = docs?.hasContributing ?? null;
   const hasSecurity = docs?.hasSecurity ?? null;
+  const hasCoc = docs?.hasCoc ?? null;
+  const hasDepUpdater = docs?.hasDepUpdater ?? null;
   if (docs === null) missing.add("checklist");
 
   const contributorsSignal = contributors ?? null;
@@ -158,6 +160,8 @@ export async function fetchRepoScoreInput(
     hasReadme,
     hasContributing,
     hasSecurity,
+    hasCoc,
+    hasDepUpdater,
     starredAt: starTimeline?.starredAt ?? null,
     stargazerIds: starTimeline?.ids,
     stargazerLogins: starTimeline?.logins,
@@ -230,15 +234,22 @@ async function readmeProbe(
 }
 
 /**
- * CONTRIBUTING / SECURITY 在根目录或 `.github/` 都可能出现。
+ * CONTRIBUTING / SECURITY / CODE_OF_CONDUCT 在根目录或 `.github/` 都可能出现,
+ * dependabot.yml 固定在 `.github/`,renovate.json 两处皆可。
  * 两份目录清单并行拉取,大小写不敏感匹配;404 视为空清单。
  * 目录清单本身失败(非 404)→ 整组未知,登记 checklist。
+ * 信号定义参照 OpenSSF Scorecard 检查项(Dependency-Update-Tool 等),零额外 API 调用。
  */
 async function probeDocs(
   octokit: Octokit,
   ref: RepoRef,
   missing: Set<string>,
-): Promise<{ hasContributing: boolean; hasSecurity: boolean } | null> {
+): Promise<{
+  hasContributing: boolean;
+  hasSecurity: boolean;
+  hasCoc: boolean;
+  hasDepUpdater: boolean;
+} | null> {
   async function listDir(path: string): Promise<string[] | null> {
     try {
       const res = await octokit.repos.getContent({ owner: ref.owner, repo: ref.repo, path });
@@ -264,6 +275,15 @@ async function probeDocs(
   return {
     hasContributing: names.some((n) => n.startsWith("contributing")),
     hasSecurity: names.some((n) => n.startsWith("security")),
+    hasCoc: names.some(
+      (n) => n.startsWith("code_of_conduct") || n.startsWith("code-of-conduct"),
+    ),
+    hasDepUpdater: names.some(
+      (n) =>
+        /^dependabot\.ya?ml$/.test(n) ||
+        /^renovate\.json5?$/.test(n) ||
+        /^\.renovaterc(\.json)?$/.test(n),
+    ),
   };
 }
 

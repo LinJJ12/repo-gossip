@@ -53,6 +53,10 @@ export type RepoScoreInput = {
   hasReadme: boolean | null;
   hasContributing: boolean | null;
   hasSecurity: boolean | null;
+  /** CODE_OF_CONDUCT 存在(根/.github 清单);null = 清单抓取失败。 */
+  hasCoc?: boolean | null;
+  /** dependabot.yml / renovate.json 配置存在(参照 OpenSSF Scorecard)。 */
+  hasDepUpdater?: boolean | null;
   /**
    * stargazer 时间线(starred_at,仅 star ≥ 500 的仓库抓取,≤400 个)。
    * null = 抓取失败或未抓取(见 starTimelineSkipped)。
@@ -263,6 +267,8 @@ const STR = {
   },
   issueCloseRate: { zh: "issue 季度关闭率", en: "issue close rate (90d)" },
   freshPush: { zh: "30天内推送", en: "pushed ≤30d" },
+  depUpdater: { zh: "依赖更新", en: "dep-updater" },
+  coc: { zh: "行为准则", en: "code-of-conduct" },
   chkEngagement: { zh: "star 互动比", en: "star engagement" },
   chkStarContrib: { zh: "star/贡献者", en: "star/contributors" },
   chkHighLow: { zh: "高星低活", en: "high stars, low activity" },
@@ -531,12 +537,20 @@ function buildCommunity(input: RepoScoreInput, locale: ScoreLocale): ScoreDimens
 }
 
 function buildEngineering(input: RepoScoreInput, locale: ScoreLocale): ScoreDimension {
+  // 权重合计 1.0;新增项参照 OpenSSF Scorecard 检查项(Dependency-Update-Tool 等)。
   const items: { id: string; label: string; weight: number; present: boolean | null }[] = [
-    { id: "license", label: "license", weight: 0.25, present: licensePresent(input.licenseSpdx) },
-    { id: "readme", label: "README", weight: 0.2, present: input.hasReadme },
-    { id: "ci", label: "CI", weight: 0.2, present: input.hasCi },
+    { id: "license", label: "license", weight: 0.2, present: licensePresent(input.licenseSpdx) },
+    { id: "readme", label: "README", weight: 0.15, present: input.hasReadme },
+    { id: "ci", label: "CI", weight: 0.15, present: input.hasCi },
     { id: "contributing", label: "CONTRIBUTING", weight: 0.1, present: input.hasContributing },
     { id: "security", label: "SECURITY", weight: 0.1, present: input.hasSecurity },
+    {
+      id: "dep-updater",
+      label: tx(STR.depUpdater, locale),
+      weight: 0.1,
+      present: input.hasDepUpdater ?? null,
+    },
+    { id: "coc", label: tx(STR.coc, locale), weight: 0.05, present: input.hasCoc ?? null },
     { id: "fresh-push", label: tx(STR.freshPush, locale), weight: 0.15, present: pushedWithinDays(input.pushedAt, 30) },
   ];
 

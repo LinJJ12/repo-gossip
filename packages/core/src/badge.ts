@@ -69,21 +69,74 @@ export function badgeErrorSvg(locale: ScoreLocale = "zh"): string {
   return render(BADGE_LABEL[locale]!, "N/A", COLOR_NA);
 }
 
+// ---------------------------------------------------------------------------
+// shields.io endpoint JSON:字段对齐 shields /endpoint/ schema,用户一行
+// `img.shields.io/endpoint?url=…` 即可挂徽章,由 shields 负责渲染与缓存分发。
+// ---------------------------------------------------------------------------
+
+const ENDPOINT_NA_COLOR = "lightgrey";
+
+/** 评分 → shields endpoint JSON 字符串(color 为无 # 的十六进制/命名色)。 */
+export function formatBadgeEndpoint(
+  score: RepoScore,
+  locale: ScoreLocale = "zh",
+): string {
+  const label = BADGE_LABEL[locale]!;
+  if (score.total === null) {
+    return badgeEndpointError(locale);
+  }
+  const grade = score.grade;
+  const message = grade
+    ? `${score.total} ${grade.label} ${grade.emoji}`
+    : String(score.total);
+  const color = grade ? GRADE_COLORS[grade.id]?.slice(1) ?? ENDPOINT_NA_COLOR : ENDPOINT_NA_COLOR;
+  return JSON.stringify({ schemaVersion: 1, label, message, color });
+}
+
+/** 端点失败同样输出合法 N/A JSON(shields 侧永不显示 invalid response)。 */
+export function badgeEndpointError(locale: ScoreLocale = "zh"): string {
+  return JSON.stringify({
+    schemaVersion: 1,
+    label: BADGE_LABEL[locale]!,
+    message: "N/A",
+    color: ENDPOINT_NA_COLOR,
+  });
+}
+
 /**
- * 解析徽章路径参数:`owner/repo.svg`(或 `owner/repo`)→ 规范 repo 字符串;
- * 非法输入返回 null。
+ * 解析徽章路径参数:`owner/repo.svg` / `owner/repo.json` / `owner/repo`
+ * → 规范 repo 字符串与响应格式;非法输入返回 null。
  */
-export function resolveBadgeRepoParam(
+export function resolveBadgeRequest(
   ownerRaw: unknown,
   repoRaw: unknown,
-): string | null {
+): { owner: string; repo: string; format: "svg" | "json" } | null {
   if (typeof ownerRaw !== "string" || typeof repoRaw !== "string") return null;
   const owner = ownerRaw.trim();
-  const repo = repoRaw.trim().replace(/\.svg$/i, "");
+  let repo = repoRaw.trim();
+  let format: "svg" | "json" = "svg";
+  if (/\.json$/i.test(repo)) {
+    format = "json";
+    repo = repo.replace(/\.json$/i, "");
+  } else {
+    repo = repo.replace(/\.svg$/i, "");
+  }
   if (!owner || !repo) return null;
   if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(owner)) return null;
   if (!/^[A-Za-z0-9._-]+$/.test(repo)) return null;
   // 与 isGithubFullName 同口径:拒绝 ".."、首尾点等纯 404 输入。
   if (repo.startsWith(".") || repo.endsWith(".")) return null;
-  return `${owner}/${repo}`;
+  return { owner, repo, format };
+}
+
+/**
+ * 解析徽章路径参数:`owner/repo.svg`(或 `owner/repo`)→ 规范 repo 字符串;
+ * 非法输入返回 null。(仅需要 repo 字符串的旧调用方使用。)
+ */
+export function resolveBadgeRepoParam(
+  ownerRaw: unknown,
+  repoRaw: unknown,
+): string | null {
+  const resolved = resolveBadgeRequest(ownerRaw, repoRaw);
+  return resolved ? `${resolved.owner}/${resolved.repo}` : null;
 }

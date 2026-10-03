@@ -439,6 +439,57 @@ describe("handleBadgeApiRequest · 永不破图", () => {
     assert.equal(second.headers["Cache-Control"], "no-store");
   });
 
+  it("badge .json → shields endpoint 格式(application/json + schemaVersion)", async () => {
+    const calls: { score?: number } = {};
+    const deps = { runScore: scoreStubForBadge };
+    const first = await handleBadgeApiRequest(
+      { method: "GET", owner: "a", repo: "b.json", headers: {} },
+      deps,
+    );
+    assert.equal(first.status, 200);
+    assert.match(first.headers["Content-Type"] ?? "", /application\/json/);
+    const payload = JSON.parse(first.body) as {
+      schemaVersion: number;
+      label: string;
+      message: string;
+      color: string;
+    };
+    assert.equal(payload.schemaVersion, 1);
+    assert.equal(payload.label, "含金量");
+    assert.doesNotMatch(payload.color, /^#/);
+
+    // 命中缓存
+    const second = await handleBadgeApiRequest(
+      { method: "GET", owner: "a", repo: "b.json", headers: {} },
+      deps,
+    );
+    assert.equal(second.headers["X-Cache"], "HIT");
+
+    // svg 与 json 缓存键隔离:json 已缓存,svg 仍走 MISS
+    const svg = await handleBadgeApiRequest(
+      { method: "GET", owner: "a", repo: "b.svg", headers: {} },
+      deps,
+    );
+    assert.equal(svg.headers["X-Cache"], "MISS");
+    assert.match(svg.headers["Content-Type"] ?? "", /image\/svg/);
+  });
+
+  it("badge .json runner 失败 → 合法 N/A JSON + no-store", async () => {
+    const res = await handleBadgeApiRequest(
+      { method: "GET", owner: "a", repo: "b.json", headers: {} },
+      {
+        runScore: async () => {
+          throw new Error("github 500");
+        },
+      },
+    );
+    assert.equal(res.status, 200);
+    const payload = JSON.parse(res.body) as { message: string; color: string };
+    assert.equal(payload.message, "N/A");
+    assert.equal(payload.color, "lightgrey");
+    assert.equal(res.headers["Cache-Control"], "no-store");
+  });
+
   it("lang=en 徽章标签为 Gold", async () => {
     const res = await handleBadgeApiRequest({
       method: "GET",

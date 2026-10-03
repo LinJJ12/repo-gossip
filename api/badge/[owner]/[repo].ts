@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import {
   handleBadgeApiRequest,
   badgeErrorSvg,
+  badgeEndpointError,
   type HttpApiResponse,
 } from "../../../packages/core/src/index.js";
 
@@ -13,6 +14,8 @@ import {
  * 适配层兜底也输出灰色 N/A 徽章,保证"永不破图"与 500 裸 HTML 页绝缘。
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // 兜底格式跟随请求后缀:.json 用 shields endpoint N/A JSON,其余用 SVG。
+  const wantJson = /\.json$/i.test(String(req.query.repo ?? ""));
   try {
     const response = await handleBadgeApiRequest({
       method: req.method ?? "GET",
@@ -24,14 +27,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     sendVercel(res, response);
   } catch (err) {
     console.error("[api/badge] adapter error:", err);
-    sendVercel(res, {
-      status: 200,
-      headers: {
-        "Content-Type": "image/svg+xml; charset=utf-8",
-        "Cache-Control": "no-store",
-      },
-      body: badgeErrorSvg("zh"),
-    });
+    sendVercel(
+      res,
+      wantJson
+        ? {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json; charset=utf-8",
+              "Cache-Control": "no-store",
+            },
+            body: badgeEndpointError("zh"),
+          }
+        : {
+            status: 200,
+            headers: {
+              "Content-Type": "image/svg+xml; charset=utf-8",
+              "Cache-Control": "no-store",
+            },
+            body: badgeErrorSvg("zh"),
+          },
+    );
   }
 }
 

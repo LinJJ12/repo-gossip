@@ -29,8 +29,10 @@ import {
 } from "./byok.js";
 import {
   formatBadgeSvg,
+  formatBadgeEndpoint,
   badgeErrorSvg,
-  resolveBadgeRepoParam,
+  badgeEndpointError,
+  resolveBadgeRequest,
 } from "./badge.js";
 import { runGossip, runScore, runCompare } from "./gossip.js";
 import { toDiscordEmbed, toFeishuCard } from "./format.js";
@@ -529,7 +531,7 @@ export type BadgeApiInput = {
 };
 
 /**
- * GET /api/badge/:owner/:repo.svg
+ * GET /api/badge/:owner/:repo.svg(或 .json —— shields.io endpoint 格式)
  * 含金量徽章:公开访问、永不破图 —— 仓库失败、限额、限流一律输出灰色 N/A(HTTP 200)。
  */
 export async function handleBadgeApiRequest(
@@ -542,10 +544,11 @@ export async function handleBadgeApiRequest(
     return json(405, { error: "Method not allowed" });
   }
 
-  const repoRef = resolveBadgeRepoParam(input.owner, input.repo);
-  if (!repoRef) {
+  const badgeReq = resolveBadgeRequest(input.owner, input.repo);
+  if (!badgeReq) {
     return json(400, { error: "invalid badge repo path" });
   }
+  const repoRef = `${badgeReq.owner}/${badgeReq.repo}`;
 
   const locale: ScoreLocale =
     typeof input.lang === "string" && input.lang.toLowerCase() === "en"
@@ -558,16 +561,22 @@ export async function handleBadgeApiRequest(
     repo: repoRef,
     days: 0,
     offline: true,
-    format: "badge",
+    format: `badge-${badgeReq.format}`,
     byokFingerprint: "",
     lang: locale,
     internal: false,
   });
 
-  const baseHeaders: Record<string, string> = {
-    "Content-Type": "image/svg+xml; charset=utf-8",
-    "Cache-Control": "public, max-age=3600, s-maxage=3600",
-  };
+  const baseHeaders: Record<string, string> =
+    badgeReq.format === "json"
+      ? {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "public, max-age=3600, s-maxage=3600",
+        }
+      : {
+          "Content-Type": "image/svg+xml; charset=utf-8",
+          "Cache-Control": "public, max-age=3600, s-maxage=3600",
+        };
 
   const cached = getGossipCache(cacheKey);
   if (cached) {
@@ -594,23 +603,29 @@ export async function handleBadgeApiRequest(
     return {
       status: 200,
       headers: {
-        "Content-Type": "image/svg+xml; charset=utf-8",
+        ...baseHeaders,
         "Cache-Control": "no-store",
         "Retry-After": String(ipResult.retryAfterSec),
         "X-Cache": "RATE-LIMITED",
       },
-      body: badgeErrorSvg(locale),
+      body:
+        badgeReq.format === "json"
+          ? badgeEndpointError(locale)
+          : badgeErrorSvg(locale),
     };
   }
 
   try {
     const { score } = await doScore({ repo: repoRef, locale });
-    const svg = formatBadgeSvg(score, locale);
-    setGossipCache(cacheKey, { status: 200, body: svg }, ttlSec);
+    const body =
+      badgeReq.format === "json"
+        ? formatBadgeEndpoint(score, locale)
+        : formatBadgeSvg(score, locale);
+    setGossipCache(cacheKey, { status: 200, body }, ttlSec);
     return {
       status: 200,
       headers: { ...baseHeaders, "X-Cache": "MISS" },
-      body: svg,
+      body,
     };
   } catch {
     // 仓库不存在 / 限额 / 网络失败 —— 一律灰色 N/A,不破图。
@@ -618,11 +633,14 @@ export async function handleBadgeApiRequest(
     return {
       status: 200,
       headers: {
-        "Content-Type": "image/svg+xml; charset=utf-8",
+        ...baseHeaders,
         "Cache-Control": "no-store",
         "X-Cache": "BYPASS",
       },
-      body: badgeErrorSvg(locale),
+      body:
+        badgeReq.format === "json"
+          ? badgeEndpointError(locale)
+          : badgeErrorSvg(locale),
     };
   }
 }
